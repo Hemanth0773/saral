@@ -1,0 +1,177 @@
+{
+  "info": {
+    "name": "Cognitive Accessibility Simplifier API",
+    "description": "API for simplifying complex government documents into accessible content",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/api/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "health"]
+            },
+            "description": "Check if the API is running and healthy"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Document Processing (Milestone 2+)",
+      "item": [
+        {
+          "name": "Extract PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "<path-to-pdf-file>"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/documents/extract",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "documents", "extract"]
+            },
+            "description": "Extract text from an uploaded PDF document"
+          },
+          "response": []
+        },
+        {
+          "name": "Extract from URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.gov.in/scheme\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/documents/url",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "documents", "url"]
+            },
+            "description": "Extract text from a government webpage URL"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Simplification (Milestone 5+)",
+      "item": [
+        {
+          "name": "Simplify Document",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "<path-to-pdf-file>"
+                }
+              ]
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/documents/simplify",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "documents", "simplify"]
+            },
+            "description": "Full pipeline: Extract, Simplify, Analyze, and Validate a government document"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Translation (Milestone 9+)",
+      "item": [
+        {
+          "name": "Translate Text",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"This is a simple government message about housing assistance.\",\n  \"source_language\": \"en\",\n  \"target_language\": \"kn\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/translate",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "translate"]
+            },
+            "description": "Translate simplified text to a regional language"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Text-to-Speech (Milestone 10+)",
+      "item": [
+        {
+          "name": "Generate Audio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"This is a simple government message.\",\n  \"language\": \"en\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/tts",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "tts"]
+            },
+            "description": "Generate audio (TTS) from simplified text"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
