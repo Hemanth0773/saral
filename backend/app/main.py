@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.api.routes import health
+from app.api.routes import health, documents
 
 
 # Setup logging
@@ -58,6 +58,7 @@ app.add_middleware(
 
 # Include routes
 app.include_router(health.router, prefix="/api", tags=["health"])
+app.include_router(documents.router, prefix="/api", tags=["documents"])
 
 
 # Root endpoint

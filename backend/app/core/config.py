@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     USE_DATABASE: bool = False
 
+    # URL Fetching (MILESTONE 2)
+    URL_FETCH_TIMEOUT: int = 10  # seconds
+    URL_FETCH_MAX_SIZE: int = 10485760  # 10MB
+    DOCUMENT_ID_PREFIX: str = "doc"
+
     # Logging
     LOG_LEVEL: str = "INFO"
 

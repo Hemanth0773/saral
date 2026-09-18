@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(python -m pytest tests/test_health.py -v --tb=short)",
+      "Bash(pip list *)",
+      "Bash(python -m pytest tests/test_health.py -v)",
+      "Bash(python -m pytest tests/test_health.py::TestDocumentExtraction::test_health_endpoint_still_works -v)"
+    ]
+  }
+}
