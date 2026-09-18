@@ -1,11 +1,11 @@
 """
 PDF document extraction service.
-Handles text extraction from PDF files using pypdf (pure Python, no C++ required).
+Handles text extraction from PDF files using pypdf and OCR context.
 """
 
 from pypdf import PdfReader
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List, Dict, Any
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -20,7 +20,7 @@ def extract_text_from_pdf(file_path: str) -> Tuple[str, str, int]:
 
     Returns:
         Tuple of (text, extraction_method, page_count)
-        extraction_method: "pdf_text" or "pdf_image_stub"
+        extraction_method: "pdf_text", "pdf_ocr", or "pdf_mixed"
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -30,6 +30,10 @@ def extract_text_from_pdf(file_path: str) -> Tuple[str, str, int]:
         raise FileNotFoundError(f"PDF file not found: {file_path}")
 
     try:
+        # Import OCR utilities locally to avoid circular dependencies
+        from app.utils.ocr_utils import extract_pdf_images, cleanup_extracted_files
+        from app.services.ocr_service import ocr_pdf_images
+
         # Open and read PDF
         with open(file_path, 'rb') as pdf_file:
             pdf_reader = PdfReader(pdf_file)
@@ -39,41 +43,87 @@ def extract_text_from_pdf(file_path: str) -> Tuple[str, str, int]:
                 raise ValueError("PDF has no pages")
 
             # Track extraction method
-            extraction_method = "pdf_text"
+            has_text = False
+            has_images = False
             text_parts = []
+
+            # Step 1: First try standard text extraction
+            text_pages = 0
             image_only_pages = 0
 
-            # Extract text from each page
             for page_num in range(page_count):
                 try:
                     page = pdf_reader.pages[page_num]
                     text = page.extract_text()
 
-                    # If page has very little text, it might be image-based
-                    if len(text.strip()) < 10:
-                        image_only_pages += 1
-                        # Add page marker for readability
-                        text_parts.append(f"\n[Page {page_num + 1} - Image content]\n")
+                    if text and len(text.strip()) > 50:
+                        # Page has good text
+                        has_text = True
+                        text_pages += 1
+                        text_parts.append({
+                            "page_number": page_num + 1,
+                            "text": text,
+                            "method": "text"
+                        })
                     else:
-                        text_parts.append(f"\n--- Page {page_num + 1} ---\n")
-                        text_parts.append(text)
+                        # Page is mostly images or empty
+                        image_only_pages += 1
+                        has_images = True
 
                 except Exception as e:
                     logger.warning(f"Failed to extract text from page {page_num + 1}: {str(e)}")
-                    text_parts.append(f"\n[Page {page_num + 1} - Extraction failed]\n")
+                    image_only_pages += 1
+                    has_images = True
 
-            # If most pages are image-based, mark as such (OCR in future milestone)
-            if image_only_pages > page_count * 0.5:
-                extraction_method = "pdf_image_stub"
-                logger.info(f"PDF appears to be image-based ({image_only_pages}/{page_count} pages)")
+            # Combine the results into a final text based on what we found
+            final_text = ""
+            extraction_method = "pdf_text"
 
-            combined_text = "".join(text_parts)
+            # Case 1: Pure text PDF
+            if has_text and image_only_pages == 0:
+                extraction_method = "pdf_text"
+                from app.utils.ocr_utils import combine_ocr_results
+                final_text = combine_ocr_results(text_parts)
 
-            if not combined_text.strip():
+            # Case 2: Pure image PDF or Mixed PDF (Needs OCR)
+            elif has_images:
+                try:
+                    # Let the OCR service handle extracting and processing images
+                    logger.info(f"PDF needs OCR ({image_only_pages} image pages discovered)")
+                    ocr_text, ocr_pages = ocr_pdf_images(file_path)
+
+                    if has_text and text_pages > 0:
+                        # Mixed PDF: Combine text with OCR results
+                        extraction_method = "pdf_mixed"
+                        # Simple combination for now, preserving page order would be better
+                        from app.utils.ocr_utils import combine_ocr_results
+                        base_text = combine_ocr_results(text_parts)
+                        final_text = base_text + "\n\n--- SCANNED PAGES (OCR) ---\n" + ocr_text
+                    else:
+                        # Pure Image PDF
+                        extraction_method = "pdf_ocr"
+                        final_text = ocr_text
+
+                except ValueError as ve:
+                    # If Tesseract is not installed, fallback to stub
+                    logger.warning(f"OCR not available or failed: {str(ve)}")
+                    if has_text:
+                        extraction_method = "pdf_text"
+                        from app.utils.ocr_utils import combine_ocr_results
+                        final_text = combine_ocr_results(text_parts) + "\n\n[Some scanned pages could not be read. Please install Tesseract OCR.]\n"
+                    else:
+                        extraction_method = "pdf_image_stub"
+                        from app.utils.ocr_utils import combine_ocr_results
+                        final_text = combine_ocr_results([
+                            {"page_number": i+1, "text": "[Image content - No OCR available]", "method": "stub"}
+                            for i in range(page_count)
+                        ])
+
+            if not final_text.strip():
                 raise ValueError("No text could be extracted from PDF")
 
-            logger.info(f"Successfully extracted text from PDF: {page_count} pages, {len(combined_text)} chars, method={extraction_method}")
-            return combined_text, extraction_method, page_count
+            logger.info(f"Successfully extracted text from PDF: {page_count} pages, {len(final_text)} chars, method={extraction_method}")
+            return final_text, extraction_method, page_count
 
     except ValueError:
         raise

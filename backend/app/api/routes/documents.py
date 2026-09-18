@@ -89,7 +89,7 @@ async def extract_document(file: UploadFile = File(...)) -> dict:
             )
 
         # Process file
-        result = document_service.process_pdf_upload(
+        result = document_service.process_document_upload(
             file_content=file_content,
             original_filename=file.filename,
             upload_dir=settings.UPLOAD_DIRECTORY,

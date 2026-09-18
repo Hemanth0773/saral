@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from io import BytesIO
 from app.main import app
 from app.services import document_service
+from unittest.mock import patch
+from unittest.mock import patch
 
 
 client = TestClient(app)
@@ -31,13 +33,35 @@ class TestDocumentExtraction:
     def test_extract_invalid_file_type(self):
         """Test extraction with invalid file type"""
         # Create a file with invalid extension
-        file_content = b"This is not a PDF"
+        file_content = b"This is not a PDF or Image"
         files = {"file": ("test.exe", file_content, "application/octet-stream")}
         response = client.post("/api/documents/extract", files=files)
         assert response.status_code == 400
         data = response.json()
         assert data["success"] is False
         assert "INVALID_FILE_TYPE" in data["error"]["code"]
+
+    @patch('app.services.document_service.process_document_upload')
+    def test_extract_image_file(self, mock_process):
+        """Test extraction with an image file"""
+        mock_process.return_value = {
+            "success": True,
+            "document_id": "doc_123",
+            "filename": "test.jpg",
+            "language": "en",
+            "page_count": 1,
+            "extraction_method": "image_ocr",
+            "text": "Image text",
+            "text_truncated": False,
+            "metadata": {}
+        }
+
+        file_content = b"dummy image content"
+        files = {"file": ("test.jpg", file_content, "image/jpeg")}
+        response = client.post("/api/documents/extract", files=files)
+
+        assert response.status_code == 200
+        mock_process.assert_called_once()
 
     def test_extract_empty_file(self):
         """Test extraction with empty file"""

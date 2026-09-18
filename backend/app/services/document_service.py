@@ -46,13 +46,13 @@ def detect_language(text: str) -> str:
         return "en"
 
 
-def process_pdf_upload(
+def process_document_upload(
     file_content: bytes,
     original_filename: str,
     upload_dir: str
 ) -> Dict[str, Any]:
     """
-    Process PDF file upload.
+    Process file upload (PDF or Image).
 
     Args:
         file_content: Binary file content
@@ -70,14 +70,45 @@ def process_pdf_upload(
     try:
         # Import here to avoid circular imports
         from app.utils.file_utils import save_uploaded_file, clean_temp_file
+        import os
 
         # Save file
         file_path = save_uploaded_file(file_content, original_filename, upload_dir)
-        logger.info(f"Processing PDF: {document_id}")
+        extension = original_filename.lower().split('.')[-1] if '.' in original_filename else ''
+
+        logger.info(f"Processing document: {document_id} ({extension})")
 
         try:
-            # Extract text
-            text, extraction_method, page_count = pdf_service.extract_text_from_pdf(file_path)
+            # Determine processing path based on file extension
+            if extension == 'pdf':
+                text, extraction_method, page_count = pdf_service.extract_text_from_pdf(file_path)
+            elif extension in ['jpg', 'jpeg', 'png']:
+                # Import necessary image/OCR services
+                from app.services.image_service import enhance_image_for_ocr, correct_image_rotation
+                from app.services.ocr_service import ocr_image
+
+                # Preprocess image
+                rotated_path = correct_image_rotation(file_path)
+                enhanced_path = enhance_image_for_ocr(rotated_path)
+
+                # Apply OCR
+                text, confidence = ocr_image(enhanced_path)
+                extraction_method = "image_ocr"
+                page_count = 1
+
+                # Clean up preprocessed images
+                if rotated_path != file_path:
+                    clean_temp_file(rotated_path)
+                if enhanced_path != file_path and enhanced_path != rotated_path:
+                    clean_temp_file(enhanced_path)
+            elif extension in ['txt']:
+                # Simple text file extraction
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    text = f.read()
+                extraction_method = "plain_text"
+                page_count = 1
+            else:
+                raise ValueError(f"Unsupported file extension: {extension}")
 
             # Clean text
             clean_text = text_utils.clean_text(text)
@@ -112,16 +143,16 @@ def process_pdf_upload(
                 }
             }
 
-            logger.info(f"PDF processed successfully: {document_id}")
+            logger.info(f"Document processed successfully: {document_id}")
             return result
 
         finally:
-            # Always clean up temp file
+            # Always clean up original temp file
             clean_temp_file(file_path)
 
     except Exception as e:
-        logger.error(f"PDF processing failed for {document_id}: {str(e)}")
-        raise ValueError(f"PDF processing failed: {str(e)}")
+        logger.error(f"Document processing failed for {document_id}: {str(e)}")
+        raise ValueError(f"Document processing failed: {str(e)}")
 
 
 def process_url_input(url: str) -> Dict[str, Any]:

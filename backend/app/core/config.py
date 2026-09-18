@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     URL_FETCH_MAX_SIZE: int = 10485760  # 10MB
     DOCUMENT_ID_PREFIX: str = "doc"
 
+    # OCR Configuration (MILESTONE 3)
+    TESSERACT_PATH: str = "tesseract"  # Path to Tesseract executable
+    OCR_CONFIDENCE_THRESHOLD: float = 0.5
+    MAX_OCR_PAGES: int = 50  # Max pages to OCR in one document
+    OCR_TIMEOUT: int = 300  # Seconds per page
+
     # Logging
     LOG_LEVEL: str = "INFO"
 
