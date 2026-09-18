@@ -1,0 +1,1 @@
+- [Milestone 1 Backend Foundation](milestone-1-backend-foundation.md) — FastAPI backend foundation complete with health endpoint, configuration, logging, and security setup
