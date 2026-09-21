@@ -31,4 +31,6 @@ python-multipart==0.0.6
 # Web scraping (MILESTONE 2)
 beautifulsoup4==4.12.2
 
+# Readability analysis (MILESTONE 8)
+textstat==0.7.7
 
