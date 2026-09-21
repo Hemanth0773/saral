@@ -5,6 +5,7 @@ Handles file uploads and URL extraction endpoints.
 
 from fastapi import APIRouter, File, UploadFile, Request, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from app.core.config import settings
 from app.core.security import validate_file_upload, validate_url
 from app.core.logging import get_logger
@@ -14,11 +15,17 @@ from app.schemas.document import (
     URLExtractResponse,
     ErrorResponse,
 )
-from app.services import document_service
+from app.schemas.nlp import NLPProcessingResponse
+from app.services import document_service, nlp_service
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+class TextInput(BaseModel):
+    """Request model for NLP preprocessing"""
+    text: str = Field(..., min_length=1, description="Text to preprocess with NLP")
 
 
 @router.post(
@@ -203,6 +210,99 @@ async def extract_from_url(request: URLExtractRequest) -> dict:
                 "error": {
                     "code": "EXTRACTION_FAILED",
                     "message": "An unexpected error occurred during extraction"
+                }
+            }
+        )
+
+
+@router.post(
+    "/documents/preprocess",
+    response_model=NLPProcessingResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid input"},
+        422: {"model": ErrorResponse, "description": "Validation error"},
+        503: {"model": ErrorResponse, "description": "NLP model unavailable"},
+        500: {"model": ErrorResponse, "description": "Server error"},
+    },
+    tags=["documents"],
+    summary="Preprocess extracted text with NLP",
+    description="Apply NLP preprocessing (normalization, sentence segmentation, tokenization, entity extraction) to extracted text.",
+)
+async def preprocess_document(request: TextInput) -> dict:
+    """
+    Apply NLP preprocessing to extracted document text.
+
+    Performs comprehensive linguistic analysis including:
+    - Text normalization and cleaning
+    - Sentence tokenization
+    - Named entity recognition (NER)
+    - Part-of-speech (POS) tagging
+    - Key phrase extraction
+
+    Args:
+        request: TextInput with text to preprocess
+
+    Returns:
+        NLPProcessingResponse with linguistic analysis
+
+    Raises:
+        HTTPException: If preprocessing fails or model unavailable
+    """
+    if not request.text or not request.text.strip():
+        logger.warning("Empty text provided for preprocessing")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "INVALID_INPUT",
+                    "message": "Text cannot be empty"
+                }
+            }
+        )
+
+    try:
+        logger.info(f"NLP preprocessing request for text of length {len(request.text)}")
+        result = nlp_service.preprocess_text(request.text)
+        logger.info(f"NLP preprocessing completed successfully: {result.document_id}")
+        return result
+
+    except ValueError as e:
+        # Handle case where spaCy model is not loaded or text is invalid
+        logger.error(f"NLP preprocessing validation error: {str(e)}")
+
+        # Check if this is a model loading error
+        if "model" in str(e).lower() or "not found" in str(e).lower():
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "NLP_MODEL_UNAVAILABLE",
+                        "message": str(e)
+                    }
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "VALIDATION_ERROR",
+                        "message": str(e)
+                    }
+                }
+            )
+    except Exception as e:
+        logger.error(f"Unexpected error in preprocess_document: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "PREPROCESSING_FAILED",
+                    "message": "An unexpected error occurred during preprocessing"
                 }
             }
         )
