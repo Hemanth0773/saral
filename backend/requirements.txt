@@ -15,6 +15,11 @@ pypdf==4.0.1
 pytesseract==0.3.10
 Pillow==11.1.0
 
+# NLP Processing (MILESTONE 4)
+spacy==3.8.16
+# Note: English model en_core_web_sm needs to be downloaded separately:
+# python -m spacy download en_core_web_sm
+
 # Testing
 pytest==8.3.3
 pytest-asyncio==0.24.0
