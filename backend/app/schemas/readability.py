@@ -25,7 +25,7 @@ class ReadabilityComparison(BaseModel):
     reading_ease_improvement: float = Field(..., description="Increase in reading ease (positive=improvement)", examples=[29.6])
     sentence_length_reduction: float = Field(..., description="Reduction in average sentence length", examples=[6.25])
     target_grade_level: int = Field(..., description="Target grade level specified (1-12)", examples=[5])
-    simplified_grade_level: float = Field(..., description="Calculated grade level of simplified text", examples=[5.4])
+    simplified_grade_level: Optional[float] = Field(None, description="Calculated grade level of simplified text", examples=[5.4])
     target_achieved: bool = Field(..., description="Whether simplified text meets target grade level", examples=[False])
 
 

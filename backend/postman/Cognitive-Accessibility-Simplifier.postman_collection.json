@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Cognitive Accessibility Simplifier API",
-    "description": "API for simplifying complex government documents into accessible content",
+    "description": "API for simplifying complex government documents into accessible content. Supports multiple LLM providers: OpenAI, Google Gemini (free tier), and others. Configure via backend/.env",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -83,22 +83,51 @@
       ]
     },
     {
-      "name": "Simplification (Milestone 5+)",
+      "name": "NLP Preprocessing (Milestone 4)",
       "item": [
         {
-          "name": "Simplify Document",
+          "name": "Preprocess Text",
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "<path-to-pdf-file>"
-                }
-              ]
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The Government of India launched a new housing assistance scheme. The deadline is 31 December 2026.\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/documents/preprocess",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "documents", "preprocess"]
+            },
+            "description": "Apply NLP preprocessing: normalization, sentence segmentation, entity extraction, and key phrase extraction"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "LLM Simplification (Milestone 5)",
+      "item": [
+        {
+          "name": "Simplify Text - Basic Example",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"The applicant shall submit the duly completed application form along with the requisite supporting documentation prior to the prescribed deadline.\",\n  \"target_grade_level\": 5\n}"
             },
             "url": {
               "raw": "http://localhost:8000/api/documents/simplify",
@@ -107,7 +136,60 @@
               "port": "8000",
               "path": ["api", "documents", "simplify"]
             },
-            "description": "Full pipeline: Extract, Simplify, Analyze, and Validate a government document"
+            "description": "Simplify complex government document text to make it more accessible while preserving all critical factual information"
+          },
+          "response": []
+        },
+        {
+          "name": "Simplify Text - With Critical Facts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Eligible applicants must submit the application before 31 December 2026. The assistance amount is ₹2,50,000. Applicants must be at least 18 years old and must submit Aadhaar card, income certificate, and bank account details.\",\n  \"target_grade_level\": 5\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/documents/simplify",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "documents", "simplify"]
+            },
+            "description": "Simplify text containing critical facts (dates, money, ages, requirements). These facts must be preserved exactly.\n\nCRITICAL FACTS TO PRESERVE:\n- Deadline: 31 December 2026\n- Amount: ₹2,50,000\n- Age: 18 years\n- Required documents: Aadhaar, income certificate, bank account details"
+          },
+          "response": []
+        },
+        {
+          "name": "Validate Fact Preservation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/api/documents/simplify/validate?original_text=Apply before 31 December 2026. Amount is ₹2,50,000.&simplified_text=You must apply by 31 December 2026. You will get ₹2,50,000.",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "documents", "simplify", "validate"],
+              "query": [
+                {
+                  "key": "original_text",
+                  "value": "Apply before 31 December 2026. Amount is ₹2,50,000.",
+                  "type": "string"
+                },
+                {
+                  "key": "simplified_text",
+                  "value": "You must apply by 31 December 2026. You will get ₹2,50,000.",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Validate that critical factual information is preserved between original and simplified text. Checks for dates, amounts, ages, percentages, and other critical facts."
           },
           "response": []
         }

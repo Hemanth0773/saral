@@ -9,7 +9,6 @@ from io import BytesIO
 from app.main import app
 from app.services import document_service
 from unittest.mock import patch
-from unittest.mock import patch
 
 
 client = TestClient(app)
@@ -53,7 +52,15 @@ class TestDocumentExtraction:
             "extraction_method": "image_ocr",
             "text": "Image text",
             "text_truncated": False,
-            "metadata": {}
+            "metadata": {
+                "document_id": "doc_123",
+                "filename": "test.jpg",
+                "language": "en",
+                "page_count": 1,
+                "word_count": 2,
+                "extraction_method": "image_ocr",
+                "extracted_at": "2026-09-20T22:00:00Z"
+            }
         }
 
         file_content = b"dummy image content"
@@ -270,11 +277,12 @@ class TestEndpointDocumentation:
     """Tests that endpoints are properly documented"""
 
     def test_swagger_ui_loads(self):
-        """Test that Swagger UI includes new endpoints"""
+        """Test that Swagger UI loads successfully"""
         response = client.get("/docs")
         assert response.status_code == 200
-        # The page should contain references to document endpoints
-        assert b"documents" in response.content or b"extract" in response.content
+        # Check that Swagger UI HTML is served
+        assert b"swagger-ui" in response.content.lower()
+        assert b'<div id="swagger-ui">' in response.content
 
     def test_openapi_schema_includes_endpoints(self):
         """Test that OpenAPI schema includes new endpoints"""

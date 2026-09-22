@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.api.routes import health, documents, simplification, extraction, validation, readability
+from app.api.routes import health, documents, simplification, extraction, validation, readability, translation
 from app.schemas.document import ErrorResponse
 
 
@@ -147,6 +147,7 @@ app.include_router(simplification.router, prefix="/api", tags=["simplification"]
 app.include_router(extraction.router, prefix="/api", tags=["extraction"])
 app.include_router(validation.router, prefix="/api", tags=["validation"])
 app.include_router(readability.router, prefix="/api", tags=["documents"])
+app.include_router(translation.router, prefix="/api", tags=["translation"])
 
 
 # Root endpoint

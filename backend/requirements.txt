@@ -34,3 +34,8 @@ beautifulsoup4==4.12.2
 # Readability analysis (MILESTONE 8)
 textstat==0.7.7
 
+# Translation (MILESTONE 9)
+transformers==4.49.0
+torch==2.5.0
+sentencepiece==0.2.0
+

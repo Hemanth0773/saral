@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     TARGET_GRADE_LEVEL: int = 5
 
     # LLM Configuration
-    LLM_PROVIDER: str = "openai"  # openai, anthropic, huggingface, etc.
+    LLM_PROVIDER: str = "openai"  # openai, gemini, anthropic, huggingface, mock, etc.
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "gpt-3.5-turbo"
     LLM_TEMPERATURE: float = 0.3  # Lower = more consistent/factual

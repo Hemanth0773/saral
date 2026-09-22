@@ -4,12 +4,55 @@ Calculates objective readability metrics for text comparison and analysis.
 """
 
 import time
+import re
 from typing import Dict, Any, Optional, Tuple
 import textstat
 from app.core.logging import get_logger
 from app.utils import text_utils
 
 logger = get_logger(__name__)
+
+
+def normalize_text_for_readability(text: str) -> str:
+    """
+    Normalize text for readability analysis by removing problematic elements.
+
+    textstat's CMU dictionary has limitations and throws KeyError on:
+    - Numbers: "18", "2,50,000"
+    - Proper nouns: "Aadhaar", "Kannada"
+    - Special characters: "₹2,50,000"
+
+    This function aggressively removes problematic content to allow calculations.
+
+    Args:
+        text: Text to normalize
+
+    Returns:
+        Text cleaned for readability analysis
+    """
+    # Remove numbers
+    text = re.sub(r'\b\d+(?:[.,]\d+)*\b', '', text)
+
+    # Remove currency symbols and other special symbols
+    text = re.sub(r'[₹$€¥£]', '', text)
+
+    # Remove punctuation that might interfere
+    text = re.sub(r'[\'"(){}[\]<>]', '', text)
+
+    # Remove words starting with capitals (likely proper nouns not in CMU dict)
+    # Keep only lowercase words and common contractions
+    words = text.split()
+    cleaned_words = []
+    for word in words:
+        # Keep word if it's lowercase, is a common word, or is a contraction
+        if word and (word[0].islower() or "'" in word or '-' in word):
+            cleaned_words.append(word)
+    text = ' '.join(cleaned_words)
+
+    # Clean up extra whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
 
 
 def count_syllables(text: str) -> int:
@@ -50,10 +93,18 @@ def calculate_flesch_reading_ease(text: str) -> Optional[float]:
         return None
 
     try:
+        # Normalize text to avoid textstat KeyError on numbers
+        normalized_text = normalize_text_for_readability(text)
+        if not normalized_text or not normalized_text.strip():
+            return None
         # textstat returns float with 2 decimal places
-        score = textstat.flesch_reading_ease(text)
+        score = textstat.flesch_reading_ease(normalized_text)
         # Clamp to 0-100 range (textstat can return values outside this)
         return max(0.0, min(100.0, score))
+    except KeyError as e:
+        # textstat CMU dict lookup failed (unknown word/number)
+        logger.debug(f"Flesch Reading Ease KeyError (CMU dict lookup): {str(e)}")
+        return None
     except Exception as e:
         logger.warning(f"Error calculating Flesch Reading Ease: {str(e)}")
         return None
@@ -78,10 +129,18 @@ def calculate_flesch_kincaid_grade(text: str) -> Optional[float]:
         return None
 
     try:
+        # Normalize text to avoid textstat KeyError on numbers
+        normalized_text = normalize_text_for_readability(text)
+        if not normalized_text or not normalized_text.strip():
+            return None
         # textstat returns float with 2 decimal places
-        grade = textstat.flesch_kincaid_grade(text)
+        grade = textstat.flesch_kincaid_grade(normalized_text)
         # Clamp to reasonable range (0-18)
         return max(0.0, min(18.0, grade))
+    except KeyError as e:
+        # textstat CMU dict lookup failed (unknown word/number)
+        logger.debug(f"Flesch-Kincaid KeyError (CMU dict lookup): {str(e)}")
+        return None
     except Exception as e:
         logger.warning(f"Error calculating Flesch-Kincaid Grade: {str(e)}")
         return None

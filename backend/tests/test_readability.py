@@ -378,3 +378,51 @@ class TestEdgeCases:
         text = "Contact me at test@example.com for details."
         result = readability_service.analyze_text_readability(text)
         assert result["word_count"] > 0
+
+    def test_regression_with_numbers_and_proper_nouns(self):
+        """
+        Regression test for issue where text with numbers and proper nouns caused None metrics.
+
+        Previously, textstat.flesch_kincaid_grade() threw KeyError on:
+        - Numbers: "18", "2026", "2,50,000"
+        - Proper nouns: "Aadhaar", "Card", "Certificate", "Bank", etc.
+
+        This resulted in simplified_grade_level = None, causing Pydantic validation error.
+
+        Fix: Normalize text to remove problematic words before textstat calculation.
+        """
+        original_text = (
+            "Eligible applicants must be at least 18 years old and must submit their "
+            "application before 31 December 2026. The government will provide financial "
+            "assistance of ₹2,50,000 to eligible applicants. Applicants must submit the "
+            "following documents: Aadhaar Card, Income Certificate, Bank Account Details. "
+            "Applications can be submitted through the official portal."
+        )
+
+        simplified_text = (
+            "You must be 18 years or older to apply. Send your application before "
+            "31 December 2026. You can get ₹2,50,000 in financial help. You need these "
+            "documents: Aadhaar Card, Income Certificate, Bank Account Details. Apply "
+            "through the official portal before the deadline."
+        )
+
+        result = readability_service.compare_readability(
+            original_text=original_text,
+            simplified_text=simplified_text,
+            target_grade_level=5
+        )
+
+        # Verify metrics are calculated (not None)
+        assert result["original"]["flesch_reading_ease"] is not None
+        assert result["original"]["flesch_kincaid_grade"] is not None
+        assert result["simplified"]["flesch_reading_ease"] is not None
+        assert result["simplified"]["flesch_kincaid_grade"] is not None
+
+        # Verify comparison metrics
+        assert result["comparison"]["simplified_grade_level"] is not None
+        assert isinstance(result["comparison"]["grade_level_improvement"], float)
+        assert isinstance(result["comparison"]["reading_ease_improvement"], float)
+
+        # Simplified text should have lower grade and higher reading ease
+        assert result["simplified"]["flesch_kincaid_grade"] < result["original"]["flesch_kincaid_grade"]
+        assert result["simplified"]["flesch_reading_ease"] > result["original"]["flesch_reading_ease"]
