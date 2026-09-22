@@ -3,10 +3,49 @@ Security utilities and middleware for the application.
 """
 
 import logging
+import ipaddress
+import socket
 from typing import Optional
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+
+def _is_private_or_blocked_host(hostname: str) -> bool:
+    """
+    Check if a hostname resolves to or is a private/loopback/link-local IP.
+
+    Uses ipaddress module to detect RFC 1918 private ranges, loopback,
+    link-local (e.g. AWS metadata 169.254.169.254), and other non-public IPs.
+    """
+    # Exact hostname blocklist (covers DNS-level SSRF)
+    blocked_hostnames = ("localhost", "0.0.0.0", "::1")
+    if hostname.lower() in blocked_hostnames:
+        return True
+
+    # If the hostname is a literal IP, validate with ipaddress
+    try:
+        ip = ipaddress.ip_address(hostname)
+        return not ip.is_global or ip.is_loopback or ip.is_link_local
+    except ValueError:
+        pass
+
+    # Hostname is a domain — resolve it and check each resolved IP
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+        for info in infos:
+            ip_str = info[4][0]
+            try:
+                ip = ipaddress.ip_address(ip_str)
+                if not ip.is_global or ip.is_loopback or ip.is_link_local:
+                    return True
+            except ValueError:
+                continue
+    except (socket.gaierror, socket.herror, OSError):
+        # If resolution fails, treat as safe (let the actual request fail)
+        pass
+
+    return False
 
 
 def validate_file_upload(
@@ -81,13 +120,10 @@ def validate_url(url: str) -> tuple[bool, Optional[str]]:
     if parsed.scheme not in ("http", "https"):
         return False, "Only HTTP and HTTPS URLs are allowed"
 
-    # Check for localhost/private IPs (basic SSRF protection)
-    if parsed.hostname in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+    # Check for localhost/private IPs / link-local / blocked hostnames (SSRF protection)
+    hostname = parsed.hostname or ""
+    if _is_private_or_blocked_host(hostname):
         return False, "Local/private URLs are not allowed"
-
-    # Prevent file:// scheme
-    if parsed.scheme == "file":
-        return False, "File URLs are not allowed"
 
     return True, None
 

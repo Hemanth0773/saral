@@ -260,6 +260,11 @@ class TestAPISecurity:
             "http://0.0.0.0",
             "file:///etc/passwd",
             "ftp://example.com",
+            "http://10.0.0.1",
+            "http://172.16.0.1",
+            "http://192.168.1.1",
+            "http://169.254.169.254",
+            "http://172.31.255.255",
         ]
 
         for dangerous_url in dangerous_urls:
@@ -268,9 +273,33 @@ class TestAPISecurity:
                 json={"url": dangerous_url}
             )
             # All should be rejected
-            assert response.status_code == 400
+            assert response.status_code == 400, f"Expected 400 for SSRF URL: {dangerous_url}"
             data = response.json()
             assert data["success"] is False
+
+    def test_ssrf_protection_private_ip_ranges(self):
+        """Test SSRF protection blocks RFC 1918 private IP ranges"""
+        from app.core.security import validate_url
+        private_ips = [
+            "http://10.0.0.1",
+            "http://10.255.255.255",
+            "http://172.16.0.1",
+            "http://172.31.255.255",
+            "http://192.168.0.1",
+            "http://192.168.1.100",
+            "http://169.254.169.254",
+        ]
+        for url in private_ips:
+            is_valid, error = validate_url(url)
+            assert not is_valid, f"Expected {url} to be blocked"
+            assert "Local/private" in error or "private" in error.lower()
+
+    def test_ssrf_protection_valid_public_url(self):
+        """Test SSRF protection allows legitimate public URLs"""
+        from app.core.security import validate_url
+        is_valid, error = validate_url("https://example.gov.in/scheme")
+        assert is_valid
+        assert error is None
 
 
 class TestEndpointDocumentation:

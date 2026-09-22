@@ -79,6 +79,56 @@
             "description": "Extract text from a government webpage URL"
           },
           "response": []
+        },
+        {
+          "name": "Extract Structured Information (M6)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Eligible applicants must submit the application before 31 December 2026. The assistance amount is ₹2,50,000. Applicants must be at least 18 years old and must submit Aadhaar, income certificate, and bank account details.\",\n  \"extract_title\": true,\n  \"extract_summary\": true\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/documents/extract-info",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "documents", "extract-info"]
+            },
+            "description": "Extract structured information from government document text. Returns deadlines, eligibility, required documents, monetary amounts, ages, contact info, locations, and organizations."
+          },
+          "response": []
+        },
+        {
+          "name": "Readability Analysis (M8)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"original_text\": \"Applicants who satisfy the eligibility requirements must submit the application prior to the prescribed deadline.\",\n  \"simplified_text\": \"You must meet the rules and send your application before the deadline.\",\n  \"target_grade_level\": 5\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/documents/readability",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "documents", "readability"]
+            },
+            "description": "Analyze and compare readability metrics (Flesch Reading Ease, Flesch-Kincaid Grade Level) between original and simplified text."
+          },
+          "response": []
         }
       ]
     },
@@ -196,6 +246,36 @@
       ]
     },
     {
+      "name": "Fact Validation (Milestone 7)",
+      "item": [
+        {
+          "name": "Cross-Document Validation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"original_text\": \"Eligible applicants must submit before 31 December 2026. The assistance amount is ₹2,50,000. Must be 18+ years old.\",\n  \"simplified_text\": \"Send application by 31 December 2026. Get ₹2,50,000. Must be 18+ years old.\",\n  \"structured_information\": {}\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/documents/validate",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "documents", "validate"]
+            },
+            "description": "Validate facts across original, simplified, and structured information. Cross-checks 12 fact types: dates, money, percentages, ages, quantities, documents, eligibility, conditions, contact info, locations, organizations."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "Translation (Milestone 9+)",
       "item": [
         {
@@ -220,6 +300,31 @@
               "path": ["api", "translate"]
             },
             "description": "Translate simplified text to a regional language"
+          },
+          "response": []
+        },
+        {
+          "name": "Batch Translate Text",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"texts\": [\n    \"This is a simple government message about housing assistance.\",\n    \"Eligible applicants must submit before 31 December 2026.\"\n  ],\n  \"source_language\": \"en\",\n  \"target_language\": \"kn\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/translate/batch",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "translate", "batch"]
+            },
+            "description": "Translate multiple text strings in a single batch request (English and Kannada only)"
           },
           "response": []
         }
@@ -350,6 +455,22 @@
               "path": ["api", "tts"]
             },
             "description": "Returns 422 validation error for empty text"
+          },
+          "response": []
+        },
+        {
+          "name": "Serve Audio File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/api/media/audio/tts_en_example.mp3",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "media", "audio", "tts_en_example.mp3"]
+            },
+            "description": "Serve a previously generated TTS audio file. Replace filename with actual generated file from a TTS request."
           },
           "response": []
         }
