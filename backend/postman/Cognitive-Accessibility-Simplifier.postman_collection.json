@@ -229,7 +229,7 @@
       "name": "Text-to-Speech (Milestone 10+)",
       "item": [
         {
-          "name": "Generate Audio",
+          "name": "English TTS",
           "request": {
             "method": "POST",
             "header": [
@@ -240,7 +240,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"text\": \"This is a simple government message.\",\n  \"language\": \"en\"\n}"
+              "raw": "{\n  \"text\": \"Applicants must be 18 years or older. The application deadline is 31 December 2026.\",\n  \"language\": \"en\"\n}"
             },
             "url": {
               "raw": "http://localhost:8000/api/tts",
@@ -249,7 +249,107 @@
               "port": "8000",
               "path": ["api", "tts"]
             },
-            "description": "Generate audio (TTS) from simplified text"
+            "description": "Generate English speech audio from simplified text"
+          },
+          "response": []
+        },
+        {
+          "name": "Kannada TTF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"ಅರ್ಜಿದಾರರು 18 ವರ್ಷ ಅಥವಾ ಅದಕ್ಕಿಂತ ಹೆಚ್ಚಿನ ವಯಸ್ಸಿನವರಾಗಿರಬೇಕು.\",\n  \"language\": \"kn\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/tts",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "tts"]
+            },
+            "description": "Generate Kannada speech audio from translated text"
+          },
+          "response": []
+        },
+        {
+          "name": "TTS with Custom Speed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"This is a simple government message about housing assistance.\",\n  \"language\": \"en\",\n  \"speed\": 1.0\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/tts",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "tts"]
+            },
+            "description": "Generate English speech audio with custom speed parameter"
+          },
+          "response": []
+        },
+        {
+          "name": "TTS - Unsupported Language (Error)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Hello world\",\n  \"language\": \"fr\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/tts",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "tts"]
+            },
+            "description": "Returns 422 validation error for unsupported language"
+          },
+          "response": []
+        },
+        {
+          "name": "TTS - Empty Text (Error)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"\",\n  \"language\": \"en\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8000/api/tts",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "tts"]
+            },
+            "description": "Returns 422 validation error for empty text"
           },
           "response": []
         }

@@ -39,3 +39,6 @@ transformers==4.49.0
 torch==2.5.0
 sentencepiece==0.2.0
 
+# Text-to-Speech (MILESTONE 10)
+edge-tts==7.2.8
+
