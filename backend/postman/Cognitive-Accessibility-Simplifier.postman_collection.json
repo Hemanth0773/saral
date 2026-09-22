@@ -354,6 +354,71 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "History (Milestone 11)",
+      "item": [
+        {
+          "name": "Get History List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/api/history",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "history"]
+            },
+            "description": "Retrieve paginated list of previously processed documents, ordered by most recent first."
+          },
+          "response": []
+        },
+        {
+          "name": "Get History with Pagination",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/api/history?page=1&limit=10",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "history"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "type": "string"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Retrieve history with custom pagination. Page minimum is 1, limit max is 50."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Document History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8000/api/history/doc_20260922_120000_abc12345",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8000",
+              "path": ["api", "history", "doc_20260922_120000_abc12345"]
+            },
+            "description": "Retrieve processing history for a specific document ID. Returns all records for that document (may have multiple if re-processed). Replace with actual document_id from a previous processing run."
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }

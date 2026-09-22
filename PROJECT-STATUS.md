@@ -1,8 +1,8 @@
 # Project Status: Cognitive Accessibility Simplifier
 
 **Last Updated**: September 22, 2026  
-**Current Milestone**: Milestone 10 (Text-to-Speech) - Complete  
-**Overall Completion**: ~100% (Milestones 1-10 complete, 285 tests passing)
+**Current Milestone**: Milestone 11 (Database / History) - Complete  
+**Overall Completion**: ~100% (Milestones 1-11 complete, 331 tests passing)
 
 ---
 
@@ -19,12 +19,13 @@
 - ✅ **Milestone 8 (Readability Analysis)**: Complete - Readability metrics working
 - ✅ **Milestone 9 (Translation)**: Complete - 23 translation tests passing, NLLB model working
 - ✅ **Milestone 10 (Text-to-Speech)**: Complete - 25 TTS tests passing, English and Kannada TTS working
+- ✅ **Milestone 11 (Database / History)**: Complete - PostgreSQL integration with history tracking
 
 ### Key Metrics
-- **Total Tests**: 285
-- **Tests Passing**: 285 ✅
+- **Total Tests**: 331
+- **Tests Passing**: 331 ✅
 - **Tests Failing**: 0 ❌
-- **Test Files**: 11 (test_health.py, test_documents.py, test_ocr.py, test_nlp.py, test_simplification.py, test_extraction.py, test_validation.py, test_readability.py, test_translation.py, test_tts.py)
+- **Test Files**: 12 (test_health.py, test_documents.py, test_ocr.py, test_nlp.py, test_simplification.py, test_extraction.py, test_validation.py, test_readability.py, test_translation.py, test_tts.py, test_history.py)
 - **M7 Validation Tests**: 33/33 passing
 - **M7 Implementation**: 100% complete
 
@@ -519,6 +520,18 @@ pytest tests/ -v
 ### Structured Information Extraction (M6)
 - `POST /api/documents/extract-info` - Extract structured information (deadlines, eligibility, documents, amounts, etc.)
 
+### Translation (M9)
+- `POST /api/translate` - Translate text to target language
+- `POST /api/translate/batch` - Batch translate multiple texts
+
+### Text-to-Speech (M10)
+- `POST /api/tts` - Generate speech audio from text
+- `GET /api/media/audio/{filename}` - Serve generated audio file
+
+### History (M11)
+- `GET /api/history` - List document processing history (paginated)
+- `GET /api/history/{document_id}` - Get history for a specific document
+
 ### Documentation
 - `GET /docs` - Swagger UI
 - `GET /openapi.json` - OpenAPI schema
@@ -540,6 +553,8 @@ Key variables:
 - `MAX_FILE_SIZE_MB`: Maximum upload file size
 - `UPLOAD_DIRECTORY`: Temporary upload directory
 - `DOCUMENT_ID_PREFIX`: Prefix for generated document IDs
+- `DATABASE_URL`: PostgreSQL connection string (e.g., `postgresql+psycopg://postgres:password@localhost:5432/cognitive_accessibility_db`)
+- `USE_DATABASE`: Enable database history tracking (true/false)
 
 ---
 
@@ -552,20 +567,26 @@ Key variables:
 - ✅ M4: NLP Preprocessing (spaCy integration, linguistic analysis)
 - ✅ M5: LLM Simplification (Gemini 2.5 Flash, fact preservation validation)
 - ✅ M6: Structured Information Extraction (14 categories, deterministic extraction, 60 tests)
+- ✅ M7: Advanced Fact Validation (cross-document validation, 33 tests)
+- ✅ M8: Readability Analysis (Flesch-Kincaid metrics)
+- ✅ M9: Translation (NLLB model, English/Kannada)
+- ✅ M10: Text-to-Speech (Edge TTS, English/Kannada)
+- ✅ M11: Database/History (PostgreSQL, history API, 46 tests)
 
 ### Test Coverage
-- **163/163 tests passing** (100%)
-- **Zero regressions** from M1-M5
-- **3 pre-M6 bugs fixed** (age range, date format, validation codes)
+- **331/331 tests passing** (100%)
+- **Zero regressions** from M1-M10
+- **46 M11 tests** covering database, service, and API endpoints
 
 ### Next Steps (Future)
-- M11: Database/History (NOT IMPLEMENTED)
+- M12: Testing + Security + Documentation + Postman collection finalization
 
 ### Notes for Developers
-1. ✅ **All test failures resolved** - M1-M5 tests all passing, M6 tests implemented and passing
+1. ✅ **All test failures resolved** - M1-M10 tests all passing, M11 tests implemented and passing
 2. ✅ **Core extraction functionality** working correctly for all 14 categories
 3. ✅ **Fact preservation** integrated between M5 simplification and M6 extraction
 4. ✅ **API response format** consistent across all endpoints with error handling
 5. ✅ **Original document text** preserved as source of truth in all extraction operations
-6. ✅ **M8-M11 features** all implemented or explicitly NOT implemented per scope requirements
-7. ✅ **Text-to-Speech (M10)**: Implemented using edge-tts (Microsoft Edge TTS) with English and Kannada support
+6. ✅ **Text-to-Speech (M10)**: Implemented using edge-tts (Microsoft Edge TTS) with English and Kannada support
+7. ✅ **Database/History (M11)**: PostgreSQL integration with SQLAlchemy 2.x, history tracking for document processing pipeline
+8. ✅ **Real PostgreSQL tested** - Connected to `cognitive_accessibility_db`, tables created, history records stored and retrieved

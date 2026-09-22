@@ -11,8 +11,9 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.api.routes import health, documents, simplification, extraction, validation, readability, translation, tts
+from app.api.routes import health, documents, simplification, extraction, validation, readability, translation, tts, history
 from app.schemas.document import ErrorResponse
+from app.db import database as db_module
 
 
 # Setup logging
@@ -30,6 +31,16 @@ async def lifespan(app: FastAPI):
     logger = logging.getLogger(__name__)
     logger.info(f"Starting {settings.APP_NAME} v{settings.VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
+
+    # Initialize database if enabled
+    if settings.USE_DATABASE:
+        try:
+            db_module.init_db()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {str(e)}")
+            # Do not raise - allow app to start without DB
+            # History endpoints will return appropriate errors
 
     yield
 
@@ -149,6 +160,7 @@ app.include_router(validation.router, prefix="/api", tags=["validation"])
 app.include_router(readability.router, prefix="/api", tags=["documents"])
 app.include_router(translation.router, prefix="/api", tags=["translation"])
 app.include_router(tts.router, prefix="/api", tags=["translation"])
+app.include_router(history.router, prefix="/api", tags=["history"])
 
 
 # Root endpoint

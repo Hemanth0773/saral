@@ -193,6 +193,38 @@ async def simplify_document(request: SimplificationRequest) -> dict:
             f"validation_passed={response_data['validation_passed']}"
         )
 
+        # Record processing history if database is enabled
+        if settings.USE_DATABASE:
+            try:
+                from app.db.database import SessionLocal
+                from app.services import history_service
+
+                db_session = SessionLocal()
+                try:
+                    validation_warnings = None
+                    if not response_data["validation_passed"]:
+                        validation_warnings = [
+                            {"message": msg} for msg in response_data.get("validation_failures", [])
+                        ]
+
+                    history_service.record_history(
+                        db=db_session,
+                        document_id=document_id,
+                        processing_status="completed",
+                        original_language="en",
+                        selected_language="en",
+                        readability_target_grade=float(request.target_grade_level),
+                        simplified_text=response_data.get("simplified_text"),
+                        validation_status="PASS" if response_data["validation_passed"] else "FAIL",
+                        validation_warnings=validation_warnings,
+                        processing_time_ms=response_data.get("processing_time_ms"),
+                        text_length=len(request.text),
+                    )
+                finally:
+                    db_session.close()
+            except Exception as db_error:
+                logger.warning(f"Failed to record history for document_id={document_id}: {str(db_error)}")
+
         return response_data
 
     except HTTPException:

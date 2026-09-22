@@ -58,9 +58,9 @@ class Settings(BaseSettings):
     TTS_PROVIDER: str = "google"  # google, azure, coqui, etc.
     TTS_API_KEY: str = ""
 
-    # Database (FUTURE)
-    DATABASE_URL: str = ""
-    USE_DATABASE: bool = False
+    # Database Configuration (MILESTONE 11)
+    DATABASE_URL: str = "postgresql+psycopg://postgres:YOUR_PASSWORD@localhost:5432/cognitive_accessibility_db"
+    USE_DATABASE: bool = True
 
     # URL Fetching (MILESTONE 2)
     URL_FETCH_TIMEOUT: int = 10  # seconds
