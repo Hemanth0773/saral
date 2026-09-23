@@ -64,7 +64,7 @@ export default function TranslationSection({ initialText, onTranslationComplete 
   };
 
   useEffect(() => {
-    textAreaRef.current?.focus();
+    textAreaRef.current?.focus({ preventScroll: true });
   }, []);
 
   return (
