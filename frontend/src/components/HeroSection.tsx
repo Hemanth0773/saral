@@ -17,10 +17,6 @@ export default function HeroSection({ ttsPlaying, ttsLoading, ttsError, onToggle
     <section className="max-w-7xl mx-auto px-6 lg:px-12 pt-6 pb-16 lg:py-12" id="top">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
         <div className="lg:col-span-7 min-w-0 flex flex-col items-start">
-          <div className="inline-flex items-center gap-2 bg-white stroke-border px-4 py-1.5 rounded-full text-xs font-black tracking-wider uppercase mb-6 card-shadow-sm hover:scale-105 transition-transform cursor-default">
-            <span className="text-xs inline-block animate-spin" style={{ animationDuration: '6s' }}>✦</span>
-            <span>ACCESSIBLE CIVIC INTELLIGENCE</span>
-          </div>
           <h1 className="text-5xl sm:text-6xl xl:text-7xl font-extrabold tracking-tight leading-[1.05] mb-6">
             Government<br />information,<br />made simple.
           </h1>
@@ -102,7 +98,7 @@ export default function HeroSection({ ttsPlaying, ttsLoading, ttsError, onToggle
             </div>
             <div className="w-full bg-white stroke-border rounded-3xl p-4 sm:p-6 relative card-shadow-lg overflow-hidden group">
               <div className="w-full rounded-2xl overflow-hidden stroke-border bg-white flex items-center justify-center p-2 group-hover:scale-[1.01] transition-transform duration-300">
-                <img alt="Saral document simplification illustration" className="w-full h-full object-contain filter contrast-125 select-none block" src="https://lh3.googleusercontent.com/aida/AEtjO1VELy9GSCCuHg50gJeXZdrWqsej-WNtvWMNWyx2VzeTjwLOoILS8wqgT5N3UuxuZruGZrwjHR01op83p-veRX1dZ_A99LKZaaTdMZBoUhM24S7hY-zOduh49JZ_ax_ebGizcyX3Jl0SkueaaAX9zEOcoXGMrjJhbf47x99IG6BTqAZjIMJ9awOlEVBBz-UeaWysURx7nCoMCiAS4lp4luebn2C39L3klM_g3P8c_0gu5dQ-G3w6EX3jUjA" />
+                <img alt="Saral document simplification illustration" className="w-full h-full object-contain select-none block" src="/hero-illustration.svg" />
               </div>
               <div className="mt-4 flex justify-end">
                 <button aria-label="Toggle clear audio readout" aria-pressed={ttsPlaying} className="btn-tactile inline-flex items-center gap-3 bg-white stroke-border px-4 py-2 rounded-full cursor-pointer text-left transition-transform active:scale-95 disabled:opacity-70 disabled:cursor-wait" disabled={ttsLoading} onClick={onToggleTts} type="button">

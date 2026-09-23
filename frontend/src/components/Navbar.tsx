@@ -7,7 +7,7 @@ type NavbarProps = {
 export default function Navbar({ ttsPlaying, ttsLoading, onToggleTts }: NavbarProps) {
   return (
     <header className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-12 py-5 sm:py-6 flex items-center justify-between">
-      <a aria-label="Saral Home" className="group flex shrink-0 items-center gap-1 text-2xl font-extrabold tracking-tight transition-transform duration-200 active:scale-95" href="#top">
+      <a aria-label="Saral Home" className="group flex shrink-0 items-center gap-1 text-[1.8rem] font-extrabold tracking-tight transition-transform duration-200 active:scale-95" href="#top">
         <span className="group-hover:tracking-normal transition-all">Saral</span>
         <span className="w-2.5 h-2.5 rounded-full bg-black inline-block ml-0.5 group-hover:scale-125 transition-transform"></span>
       </a>

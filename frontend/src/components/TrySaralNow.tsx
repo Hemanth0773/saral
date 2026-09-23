@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { API_BASE_URL, extractDocumentUrl, type DocumentExtractionResponse } from '../services/api';
+import { API_BASE_URL, extractDocumentUrl, simplifyDocument, type DocumentExtractionResponse, type SimplificationResponse } from '../services/api';
 
 type TrySaralNowProps = {
   sampleUrl: string | null;
   samplePulse: number;
+  onSimplificationComplete?: (simplifiedText: string) => void;
 };
 
 const acceptedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
@@ -23,24 +24,35 @@ function getPayloadMessage(payload: unknown) {
   return 'The backend returned an unexpected response.';
 }
 
-export default function TrySaralNow({ sampleUrl, samplePulse }: TrySaralNowProps) {
+function isUrl(input: string) {
+  try {
+    const parsed = new URL(input);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export default function TrySaralNow({ sampleUrl, samplePulse, onSimplificationComplete }: TrySaralNowProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('Uploading document...');
-  const [urlValue, setUrlValue] = useState('');
+  const [inputValue, setInputValue] = useState('');
   const [urlIndicator, setUrlIndicator] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<DocumentExtractionResponse | null>(null);
-  const [submittingUrl, setSubmittingUrl] = useState(false);
+  const [extractionResult, setExtractionResult] = useState<DocumentExtractionResponse | null>(null);
+  const [simplificationResult, setSimplificationResult] = useState<SimplificationResponse | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragCounterRef = useRef(0);
   const requestRef = useRef<XMLHttpRequest | null>(null);
 
   const resetResult = () => {
-    setResult(null);
+    setExtractionResult(null);
+    setSimplificationResult(null);
     setError(null);
   };
 
@@ -84,7 +96,7 @@ export default function TrySaralNow({ sampleUrl, samplePulse }: TrySaralNowProps
       }
     });
 
-    xhr.addEventListener('load', () => {
+    xhr.addEventListener('load', async () => {
       setUploading(false);
       setProcessing(false);
       requestRef.current = null;
@@ -97,9 +109,22 @@ export default function TrySaralNow({ sampleUrl, samplePulse }: TrySaralNowProps
       }
 
       if (xhr.status >= 200 && xhr.status < 300) {
-        setResult(payload as DocumentExtractionResponse);
-        setProgress(100);
-        setStatusText('Extraction complete');
+        const extractionResponse = payload as DocumentExtractionResponse;
+        setExtractionResult(extractionResponse);
+        setProgress(90);
+        setStatusText('Simplifying...');
+
+        try {
+          const simplificationResponse = await simplifyDocument(extractionResponse.text);
+          setSimplificationResult(simplificationResponse);
+          setProgress(100);
+          setStatusText('Simplification complete');
+          if (simplificationResponse.simplified_text && onSimplificationComplete) {
+            onSimplificationComplete(simplificationResponse.simplified_text);
+          }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Simplification failed.');
+        }
       } else {
         setError(getPayloadMessage(payload));
       }
@@ -122,44 +147,51 @@ export default function TrySaralNow({ sampleUrl, samplePulse }: TrySaralNowProps
     xhr.send(formData);
   };
 
-  const handleUrlSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleInputSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     stopRequest();
     resetResult();
 
-    const url = urlValue.trim();
-    if (!url) {
-      setError('Paste a document or gazette URL first.');
+    const input = inputValue.trim();
+    if (!input) {
+      setError('Paste a document URL or enter text to simplify.');
       return;
     }
 
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(url);
-    } catch {
-      setError('Enter a complete URL starting with http:// or https://.');
-      return;
-    }
-    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-      setError('Only HTTP and HTTPS URLs are allowed.');
-      return;
-    }
+    const isUrlInput = isUrl(input);
 
-    setSubmittingUrl(true);
+    setSubmitting(true);
     setProcessing(true);
     setUploading(false);
-    setProgress(20);
-    setStatusText('Contacting document source...');
+    setProgress(isUrlInput ? 20 : 10);
+    setStatusText(isUrlInput ? 'Contacting document source...' : 'Simplifying...');
 
     try {
-      const response = await extractDocumentUrl(url);
-      setResult(response);
+      let extractedText: string;
+
+      if (isUrlInput) {
+        const response = await extractDocumentUrl(input);
+        setExtractionResult(response);
+        extractedText = response.text;
+        setProgress(50);
+        setStatusText('Simplifying...');
+      } else {
+        extractedText = input;
+        setProgress(50);
+        setStatusText('Simplifying...');
+      }
+
+      const simplificationResponse = await simplifyDocument(extractedText);
+      setSimplificationResult(simplificationResponse);
       setProgress(100);
-      setStatusText('Extraction complete');
+      setStatusText('Simplification complete');
+      if (simplificationResponse.simplified_text && onSimplificationComplete) {
+        onSimplificationComplete(simplificationResponse.simplified_text);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'The document could not be extracted.');
+      setError(err instanceof Error ? err.message : 'Could not process the input.');
     } finally {
-      setSubmittingUrl(false);
+      setSubmitting(false);
       setProcessing(false);
     }
   };
@@ -167,7 +199,7 @@ export default function TrySaralNow({ sampleUrl, samplePulse }: TrySaralNowProps
   useEffect(() => {
     if (!sampleUrl) return;
 
-    setUrlValue(sampleUrl);
+    setInputValue(sampleUrl);
     setUrlIndicator(true);
     const timer = window.setTimeout(() => setUrlIndicator(false), 2000);
     return () => window.clearTimeout(timer);
@@ -175,13 +207,13 @@ export default function TrySaralNow({ sampleUrl, samplePulse }: TrySaralNowProps
 
   useEffect(() => () => stopRequest(), []);
 
-  const busy = uploading || processing || submittingUrl;
+  const busy = uploading || processing || submitting;
 
   return (
     <section className="max-w-7xl mx-auto px-6 lg:px-12 py-12 reveal-section" id="try-saral">
       <div className="bg-white stroke-border rounded-3xl p-8 sm:p-12 card-shadow-lg">
         <div className="text-center max-w-2xl mx-auto mb-10">
-          <div className="inline-block bg-[#F9C915] stroke-border-thin px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider mb-3">TRY IT LIVE</div>
+          <div className="inline-block bg-[#F9C915] stroke-border-thin px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider mb-3">1 / SIMPLIFY</div>
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-3">Try Saral right now</h2>
           <p className="text-neutral-700 font-medium text-base">Upload a government circular, notice, or bill to witness instant plain-language conversion.</p>
         </div>
@@ -253,24 +285,23 @@ export default function TrySaralNow({ sampleUrl, samplePulse }: TrySaralNowProps
             </div>
             <span className="relative bg-white px-4 text-xs font-black uppercase tracking-widest text-neutral-500">OR</span>
           </div>
-          <form className="space-y-4" onSubmit={handleUrlSubmit}>
+          <form className="space-y-4" onSubmit={handleInputSubmit}>
             <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider mb-2 text-neutral-800" htmlFor="gazette-url">Paste Document or Gazette URL</label>
+              <label className="block text-xs font-extrabold uppercase tracking-wider mb-2 text-neutral-800" htmlFor="gazette-url">Paste Document URL or Plain Text</label>
               <div className="relative">
-                <input
-                  className="w-full bg-neutral-50 border-2 border-neutral-900 rounded-xl px-4 py-3.5 text-sm font-medium focus:ring-2 focus:ring-black focus:border-black outline-none placeholder:text-neutral-400 transition-colors disabled:opacity-70"
+                <textarea
+                  className="w-full bg-neutral-50 border-2 border-neutral-900 rounded-xl px-4 py-3.5 text-sm font-medium focus:ring-2 focus:ring-black focus:border-black outline-none placeholder:text-neutral-400 transition-colors disabled:opacity-70 resize-none min-h-[100px]"
                   disabled={busy}
                   id="gazette-url"
-                  onChange={(event) => setUrlValue(event.target.value)}
-                  placeholder="https://egazette.gov.in/notification..."
-                  type="url"
-                  value={urlValue}
+                  onChange={(event) => setInputValue(event.target.value)}
+                  placeholder="https://egazette.gov.in/notification... or paste plain text here"
+                  value={inputValue}
                 />
                 <span className={`${urlIndicator ? 'flex' : 'hidden'} absolute right-3 top-3.5 bg-black text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full pop-pulse`}>Sample Loaded</span>
               </div>
             </div>
             <button className="btn-tactile w-full bg-black hover:bg-neutral-900 text-white font-extrabold text-sm sm:text-base py-4 rounded-xl stroke-border flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-70 disabled:cursor-wait" disabled={busy} type="submit">
-              <span>{submittingUrl || processing ? (urlValue.trim() ? 'Analyzing Gazette...' : 'Processing...') : 'Simplify Document'}</span>
+              <span>{submitting || processing ? (inputValue.trim() ? 'Simplifying...' : 'Processing...') : 'Simplify Document'}</span>
               <span className={`group-hover:translate-x-1.5 transition-transform duration-200 ${busy ? 'hidden' : ''}`}>→</span>
               <svg className={`animate-spin h-5 w-5 text-white ${busy ? 'block' : 'hidden'}`} fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -283,22 +314,38 @@ export default function TrySaralNow({ sampleUrl, samplePulse }: TrySaralNowProps
               {error}
             </div>
           )}
-          {result && (
+          {extractionResult && !simplificationResult && (
             <div className="mt-6 bg-[#FEF9C3] stroke-border rounded-2xl p-5 text-left">
               <div className="flex items-center gap-2 pb-3 mb-3 border-b border-black/15">
                 <span className="w-2.5 h-2.5 bg-black rounded-full"></span>
                 <span className="text-xs font-extrabold uppercase tracking-wider">Extraction complete</span>
               </div>
               <p className="text-sm font-medium text-neutral-800 leading-relaxed">
-                {result.filename ? `${result.filename} was extracted` : 'The document URL was extracted'} · {result.metadata.word_count} words · {result.language.toUpperCase()} · {result.extraction_method.replace(/_/g, ' ')}
+                {extractionResult.filename ? `${extractionResult.filename} was extracted` : 'The document URL was extracted'} · {extractionResult.metadata.word_count} words · {extractionResult.language.toUpperCase()} · {extractionResult.extraction_method.replace(/_/g, ' ')}
               </p>
-              {result.text && (
+              {extractionResult.text && (
                 <details className="mt-3">
                   <summary className="cursor-pointer text-xs font-extrabold uppercase tracking-wider">View extracted text</summary>
-                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white stroke-border-thin p-3 text-xs leading-relaxed text-neutral-700">{result.text}</pre>
+                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white stroke-border-thin p-3 text-xs leading-relaxed text-neutral-700">{extractionResult.text}</pre>
                 </details>
               )}
-              <p className="mt-3 text-[11px] font-bold text-neutral-500">Document extraction is connected. The full simplification pipeline will be added in the next frontend milestone.</p>
+            </div>
+          )}
+          {simplificationResult && (
+            <div className="mt-6 bg-[#FEF9C3] stroke-border rounded-2xl p-5 text-left">
+              <div className="flex items-center gap-2 pb-3 mb-3 border-b border-black/15">
+                <span className="w-2.5 h-2.5 bg-black rounded-full"></span>
+                <span className="text-xs font-extrabold uppercase tracking-wider">Simplification complete</span>
+              </div>
+              <p className="text-sm font-medium text-neutral-800 leading-relaxed">
+                Simplified to Grade {simplificationResult.target_grade_level} · {simplificationResult.model_used} · {simplificationResult.processing_time_ms}ms
+              </p>
+              {simplificationResult.simplified_text && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-xs font-extrabold uppercase tracking-wider">View simplified text</summary>
+                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white stroke-border-thin p-3 text-xs leading-relaxed text-neutral-700">{simplificationResult.simplified_text}</pre>
+                </details>
+              )}
             </div>
           )}
           <div className="mt-6 flex items-center justify-center gap-2 text-xs font-bold text-neutral-500">

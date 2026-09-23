@@ -45,7 +45,6 @@ export default function HowSaralWorks() {
   return (
     <section className="max-w-7xl mx-auto px-6 lg:px-12 py-12 reveal-section" id="how-it-works">
       <div className="mb-10">
-        <div className="inline-block bg-white stroke-border px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider mb-3">01 / PROCESS</div>
         <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-3">How Saral works</h2>
         <p className="text-neutral-900 font-medium text-lg max-w-2xl">A streamlined 4-step transformation from legal jargon to practical clarity.</p>
       </div>

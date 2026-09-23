@@ -91,6 +91,42 @@ export type DocumentExtractionResponse = {
   };
 };
 
+export type SimplificationResponse = {
+  success: boolean;
+  document_id: string;
+  original_text: string;
+  simplified_text: string;
+  target_grade_level: number;
+  model_used: string;
+  processing_time_ms: number;
+  sections: Array<{
+    title?: string;
+    original_text: string;
+    simplified_text: string;
+    grade_level_improvement?: number;
+  }>;
+  preserved_facts: Array<{
+    fact_type: string;
+    value: string;
+    source_text: string;
+    preserved_in_simplified: boolean;
+  }>;
+  key_terms: string[];
+  validation_passed: boolean;
+  validation_failures: string[];
+  metadata: Record<string, unknown>;
+};
+
+export type TranslationResponse = {
+  success: boolean;
+  translated_text: string;
+  source_language: string;
+  target_language: string;
+  model_used: string;
+  character_count: number;
+  translated_character_count: number;
+};
+
 export type TTSResponse = {
   success: boolean;
   audio_url: string;
@@ -117,6 +153,27 @@ export function extractDocumentUrl(url: string) {
   return requestJson<DocumentExtractionResponse>('/api/documents/url', {
     method: 'POST',
     body: JSON.stringify({ url }),
+  });
+}
+
+export function simplifyDocument(text: string, targetGradeLevel = 5) {
+  return requestJson<SimplificationResponse>('/api/documents/simplify', {
+    method: 'POST',
+    body: JSON.stringify({
+      text,
+      target_grade_level: targetGradeLevel,
+    }),
+  });
+}
+
+export function translateText(text: string, sourceLanguage: string, targetLanguage: string) {
+  return requestJson<TranslationResponse>('/api/translate', {
+    method: 'POST',
+    body: JSON.stringify({
+      text,
+      source_language: sourceLanguage,
+      target_language: targetLanguage,
+    }),
   });
 }
 
