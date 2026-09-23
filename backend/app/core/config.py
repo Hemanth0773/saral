@@ -44,11 +44,23 @@ class Settings(BaseSettings):
     TARGET_GRADE_LEVEL: int = 5
 
     # LLM Configuration
-    LLM_PROVIDER: str = "openai"  # openai, gemini, anthropic, huggingface, mock, etc.
-    LLM_API_KEY: str = ""
+    LLM_PROVIDER: str = "auto"  # openai, gemini, groq, openrouter, mock, etc.
+    LLM_API_KEY: str = ""  # For backward compatibility
     LLM_MODEL: str = "gpt-3.5-turbo"
     LLM_TEMPERATURE: float = 0.3  # Lower = more consistent/factual
     LLM_MAX_TOKENS: int = 2000
+    
+    # Gemini Configuration
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-pro"
+    
+    # Groq Configuration
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-20b"
+    
+    # OpenRouter Configuration
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_MODEL: str = "openai/gpt-oss-20b"
 
     # Translation Configuration
     TRANSLATION_PROVIDER: str = "nllb"  # nllb, indicTrans, google, etc.

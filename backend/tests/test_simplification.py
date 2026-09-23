@@ -1083,6 +1083,16 @@ You need to send these papers:
         critical_failures = [f for f in failures if "deadline" in f.lower() or "money" in f.lower() or "age" in f.lower()]
         assert len(critical_failures) == 0, f"Unexpected failures: {critical_failures}"
 
+class TestChunkedSimplification:
+    """Test chunked simplification with aggregation of key_terms and sections"""
+    def test_short_text_non_chunked(self):
+        """Test that short text uses non-chunked path and returns structured data"""
+        text = "This is a short text."
+        request_data = {
+            "text": text,
+            "target_grade_level": 5
+        }
+
 
 # ============================================================
 # Run Tests

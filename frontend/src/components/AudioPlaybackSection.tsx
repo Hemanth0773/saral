@@ -207,19 +207,21 @@ export default function AudioPlaybackSection({ initialText }: AudioPlaybackSecti
                 </div>
               </div>
 <div className="flex items-center gap-2 flex-shrink-0">
-                 <div className="flex items-center gap-2">
-                   {speedOptions.map((s) => (
-                     <button
-                       key={s}
-                       className={`btn-tactile text-xs font-bold px-3 py-1.5 rounded-full stroke-border flex items-center gap-1.5 cursor-pointer transition-all ${speed === s ? 'bg-black text-white' : 'bg-white hover:bg-neutral-100 text-black'}`}
-                       onClick={() => handleSpeedChange(s)}
-                       type="button"
-                     >
-                       <span>{s}×</span>
-                     </button>
-                   ))}
-                 </div>
-               </div>
+                  <div className="flex items-center gap-2">
+                    {speedOptions
+                      .filter(s => s !== 1)
+                      .map((s) => (
+                        <button
+                          key={s}
+                          className={`btn-tactile text-xs font-bold px-3 py-1.5 rounded-full stroke-border flex items-center gap-1.5 cursor-pointer transition-all ${speed === s ? 'bg-black text-white' : 'bg-white hover:bg-neutral-100 text-black'}`}
+                          onClick={() => handleSpeedChange(s)}
+                          type="button"
+                        >
+                          <span>{s}×</span>
+                        </button>
+                      ))}
+                  </div>
+                </div>
             </div>
             <button className="btn-tactile w-full bg-black hover:bg-neutral-900 text-white font-extrabold text-sm py-4 rounded-xl stroke-border flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-70 disabled:cursor-wait" disabled={loading} onClick={handleGenerateAudio} type="button">
               <span>{loading ? 'Generating Audio...' : (ttsResult ? 'Regenerate Audio →' : 'Play Audio →')}</span>
