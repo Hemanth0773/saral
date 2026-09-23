@@ -10,11 +10,7 @@ const supportedLanguages = [
   { code: 'kn', label: 'Kannada' }
 ];
 
-function formatTime(seconds: number) {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
+const speedOptions = [0.75, 1, 1.25, 1.5, 2] as const;
 
 export default function AudioPlaybackSection({ initialText }: AudioPlaybackSectionProps) {
   const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'kn'>('en');
@@ -26,8 +22,14 @@ export default function AudioPlaybackSection({ initialText }: AudioPlaybackSecti
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [volume, setVolume] = useState(1);
+  const [speed, setSpeed] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    setSourceText(text);
+    setUserHasEdited(true);
+  };
 
   // Handle external prefill (only if user hasn't edited)
   useEffect(() => {
@@ -35,13 +37,6 @@ export default function AudioPlaybackSection({ initialText }: AudioPlaybackSecti
       setSourceText(initialText);
     }
   }, [initialText, userHasEdited]);
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setSourceText(e.target.value);
-    if (!userHasEdited && e.target.value.trim().length > 0) {
-      setUserHasEdited(true);
-    }
-  };
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -92,11 +87,11 @@ export default function AudioPlaybackSection({ initialText }: AudioPlaybackSecti
 
       const audioUrl = getAudioUrl(response.audio_url);
       const audio = new Audio(audioUrl);
-      audio.volume = volume;
+      audio.volume = 1;
+      audio.playbackRate = speed;
       audioRef.current = audio;
 
-      await audio.play();
-      setPlaying(true);
+      // Do NOT auto-play - user will click the play button to start playback
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Audio generation failed.');
     } finally {
@@ -117,23 +112,7 @@ export default function AudioPlaybackSection({ initialText }: AudioPlaybackSecti
     }
   };
 
-  const handleStop = () => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      setPlaying(false);
-      setProgress(0);
-    }
-  };
 
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = parseFloat(e.target.value);
-    setVolume(newVolume);
-    if (audioRef.current) {
-      audioRef.current.volume = newVolume;
-    }
-  };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const audio = audioRef.current;
@@ -145,8 +124,21 @@ export default function AudioPlaybackSection({ initialText }: AudioPlaybackSecti
     setProgress(clickPosition * 100);
   };
 
+  const handleSpeedChange = (newSpeed: number) => {
+    setSpeed(newSpeed);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = newSpeed;
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
-    <section className="max-w-7xl mx-auto px-6 lg:px-12 py-12 reveal-section" id="audio-section">
+    <section className="max-w-7xl mx-auto px-6 lg:px-12 py-12 reveal-section" id="audio-playback">
       <div className="bg-white stroke-border rounded-3xl p-8 sm:p-12 card-shadow-lg">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <div className="inline-block bg-[#F9C915] stroke-border-thin px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider mb-3">3 / AUDIO PLAYBACK</div>
@@ -214,42 +206,23 @@ export default function AudioPlaybackSection({ initialText }: AudioPlaybackSecti
                   <span>{duration > 0 ? formatTime(duration) : '0:00'}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  className="btn-tactile w-10 h-10 rounded-full stroke-border bg-white flex items-center justify-center hover:bg-neutral-100 transition-colors"
-                  onClick={handleStop}
-                  disabled={!playing && progress === 0}
-                  type="button"
-                  aria-label="Stop"
-                >
-                  <svg className="w-5 h-5 text-black" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                </button>
-                <div className="flex items-center gap-1">
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={volume === 0}
-                      onChange={() => setVolume(volume === 0 ? 1 : 0)}
-                      className="w-4 h-4 accent-black"
-                    />
-                    <svg className={`w-5 h-5 text-black ${volume === 0 ? 'opacity-30' : ''}`} fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={volume}
-                    onChange={handleVolumeChange}
-                    className="w-20 h-2 accent-black appearance-none rounded-lg bg-neutral-200"
-                    aria-label="Volume"
-                  />
-                </div>
-              </div>
+<div className="flex items-center gap-2 flex-shrink-0">
+                 <div className="flex items-center gap-2">
+                   {speedOptions.map((s) => (
+                     <button
+                       key={s}
+                       className={`btn-tactile text-xs font-bold px-3 py-1.5 rounded-full stroke-border flex items-center gap-1.5 cursor-pointer transition-all ${speed === s ? 'bg-black text-white' : 'bg-white hover:bg-neutral-100 text-black'}`}
+                       onClick={() => handleSpeedChange(s)}
+                       type="button"
+                     >
+                       <span>{s}×</span>
+                     </button>
+                   ))}
+                 </div>
+               </div>
             </div>
             <button className="btn-tactile w-full bg-black hover:bg-neutral-900 text-white font-extrabold text-sm py-4 rounded-xl stroke-border flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-70 disabled:cursor-wait" disabled={loading} onClick={handleGenerateAudio} type="button">
               <span>{loading ? 'Generating Audio...' : (ttsResult ? 'Regenerate Audio →' : 'Play Audio →')}</span>
-              <span className={`group-hover:translate-x-1.5 transition-transform duration-200 ${loading ? 'hidden' : ''}`}>→</span>
               <svg className={`animate-spin h-5 w-5 text-white ${loading ? 'block' : 'hidden'}`} fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>

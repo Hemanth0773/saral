@@ -68,7 +68,7 @@ export default function TranslationSection({ initialText, onTranslationComplete 
   }, []);
 
   return (
-    <section className="max-w-7xl mx-auto px-6 lg:px-12 py-12 reveal-section" id="translation-section">
+    <section className="max-w-7xl mx-auto px-6 lg:px-12 py-12 reveal-section" id="translation">
       <div className="bg-white stroke-border rounded-3xl p-8 sm:p-12 card-shadow-lg">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <div className="inline-block bg-[#F9C915] stroke-border-thin px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider mb-3">2 / TRANSLATION</div>
@@ -102,7 +102,6 @@ export default function TranslationSection({ initialText, onTranslationComplete 
           </div>
           <button className="btn-tactile w-full bg-black hover:bg-neutral-900 text-white font-extrabold text-sm py-4 rounded-xl stroke-border flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-70 disabled:cursor-wait" disabled={translating} onClick={handleTranslate} type="button">
             <span>{translating ? 'Translating...' : 'Translate →'}</span>
-            <span className={`group-hover:translate-x-1.5 transition-transform duration-200 ${translating ? 'hidden' : ''}`}>→</span>
             <svg className={`animate-spin h-5 w-5 text-white ${translating ? 'block' : 'hidden'}`} fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
