@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="970" viewBox="0 0 1200 970">
+  <defs>
+    <style type="text/css">
+      .title { font: bold 24px sans-serif; fill: #1a1a2e; }
+      .subtitle { font: 12px sans-serif; fill: #666; }
+      .header { font: bold 16px sans-serif; fill: #1a1a2e; }
+      .label { font: 13px sans-serif; fill: #333; }
+      .small { font: 10px sans-serif; fill: #666; }
+      .box { stroke: #333; stroke-width: 2; }
+      .solid-arrow { fill: none; stroke: #4a6fa5; stroke-width: 2.5; marker-end: url(#arrowhead-blue); }
+      .dashed { fill: none; stroke: #666; stroke-width: 1.5; stroke-dasharray: 5,5; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333"/>
+    </marker>
+    <marker id="arrowhead-blue" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a6fa5"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="600" y="40" text-anchor="middle" class="title">System Architecture</text>
+  <text x="600" y="65" text-anchor="middle" class="subtitle">Cognitive Accessibility Simplifier</text>
+
+  <!-- Layer 1: Client -->
+  <rect x="50" y="100" width="1100" height="70" rx="8" fill="#e8f4f8" class="box"/>
+  <text x="600" y="125" text-anchor="middle" class="header">Layer 1: Client — React Frontend</text>
+  <text x="600" y="150" text-anchor="middle" class="label">React 19 + TypeScript 6 + Vite 8 | Tailwind CSS 3 | Responsive UI</text>
+
+  <!-- Layer 2: API Gateway -->
+  <rect x="50" y="185" width="1100" height="70" rx="8" fill="#fff3cd" class="box"/>
+  <text x="600" y="210" text-anchor="middle" class="header">Layer 2: API Gateway — FastAPI</text>
+  <text x="600" y="235" text-anchor="middle" class="label">FastAPI 0.115 | Uvicorn 0.32 | OpenAPI 3.0 (auto-generated) | CORS Middleware</text>
+
+  <!-- Layer 3: Services -->
+  <rect x="50" y="270" width="1100" height="230" rx="8" fill="#f1f8e9" class="box"/>
+  <text x="600" y="295" text-anchor="middle" class="header">Layer 3: Service Layer — NLP &amp; AI Processing Modules</text>
+
+  <!-- Services Row 1 -->
+  <rect x="100" y="315" width="190" height="55" rx="5" fill="#fff" stroke="#333" stroke-width="2"/>
+  <text x="195" y="338" text-anchor="middle" class="label">LLM Simplification</text>
+  <text x="195" y="355" text-anchor="middle" class="small">Gemini / OpenAI / Groq / OpenRouter</text>
+
+  <rect x="340" y="315" width="190" height="55" rx="5" fill="#fff" stroke="#333" stroke-width="2"/>
+  <text x="435" y="338" text-anchor="middle" class="label">Fact Extraction Service</text>
+  <text x="435" y="355" text-anchor="middle" class="small">spaCy NER + pattern matching</text>
+
+  <rect x="580" y="315" width="190" height="55" rx="5" fill="#fff" stroke="#333" stroke-width="2"/>
+  <text x="675" y="338" text-anchor="middle" class="label">Translation Service</text>
+  <text x="675" y="355" text-anchor="middle" class="small">transformers (NLLB-200)</text>
+
+  <rect x="820" y="315" width="170" height="55" rx="5" fill="#fff" stroke="#333" stroke-width="2"/>
+  <text x="905" y="338" text-anchor="middle" class="label">TTS Service</text>
+  <text x="905" y="355" text-anchor="middle" class="small">edge-tts (Microsoft)</text>
+
+  <rect x="1000" y="315" width="90" height="55" rx="5" fill="#fff" stroke="#333" stroke-width="2"/>
+  <text x="1045" y="338" text-anchor="middle" class="label">OCR Service</text>
+  <text x="1045" y="355" text-anchor="middle" class="small">pytesseract</text>
+
+  <!-- Layer 3 Row 2 -->
+  <rect x="100" y="385" width="190" height="55" rx="5" fill="#fff" stroke="#333" stroke-width="2"/>
+  <text x="195" y="408" text-anchor="middle" class="label">Fact Validation Service</text>
+  <text x="195" y="425" text-anchor="middle" class="small">Cross-doc deterministic</text>
+
+  <rect x="340" y="385" width="190" height="55" rx="5" fill="#fff" stroke="#333" stroke-width="2"/>
+  <text x="435" y="408" text-anchor="middle" class="label">Readability Service</text>
+  <text x="435" y="425" text-anchor="middle" class="small">textstat (Flesch)</text>
+
+  <rect x="580" y="385" width="190" height="55" rx="5" fill="#fff" stroke="#333" stroke-width="2"/>
+  <text x="675" y="408" text-anchor="middle" class="label">History Service</text>
+  <text x="675" y="425" text-anchor="middle" class="small">PostgreSQL (SQLAlchemy)</text>
+
+  <rect x="820" y="385" width="170" height="55" rx="5" fill="#fff" stroke="#333" stroke-width="2"/>
+  <text x="905" y="408" text-anchor="middle" class="label">Document Service</text>
+  <text x="905" y="425" text-anchor="middle" class="small">pypdf, BeautifulSoup</text>
+
+  <rect x="1000" y="385" width="90" height="55" rx="5" fill="#fff" stroke="#333" stroke-width="2"/>
+  <text x="1045" y="408" text-anchor="middle" class="label">Web Scraping</text>
+  <text x="1045" y="425" text-anchor="middle" class="small">SSRF protected</text>
+
+  <!-- Layer 4: Data & Storage -->
+  <rect x="50" y="455" width="1100" height="80" rx="8" fill="#f8d7da" class="box"/>
+  <text x="600" y="480" text-anchor="middle" class="header">Layer 4: Data Layer — PostgreSQL &amp; File Storage</text>
+
+  <!-- PostgreSQL box -->
+  <rect x="120" y="500" width="220" height="30" rx="4" fill="#fff" stroke="#333" stroke-width="1"/>
+  <text x="230" y="520" text-anchor="middle" class="label">PostgreSQL — document_history table (18 cols)</text>
+  <text x="230" y="535" text-anchor="middle" class="small">SQLAlchemy 2.0.36 | psycopg 3.2.13 | SQLModel ORM</text>
+
+  <!-- File storage box -->
+  <rect x="660" y="500" width="220" height="30" rx="4" fill="#fff" stroke="#333" stroke-width="1"/>
+  <text x="770" y="520" text-anchor="middle" class="label">File Storage — uploads/ + generated/</text>
+  <text x="770" y="535" text-anchor="middle" class="small">Audio files (MP3) | Uploaded originals</text>
+
+  <!-- External APIs -->
+  <rect x="50" y="550" width="1100" height="70" rx="8" fill="#e2d9f3" class="box"/>
+  <text x="600" y="575" text-anchor="middle" class="header">Layer 5: External API Services</text>
+  <text x="600" y="598" text-anchor="middle" class="label">Hugging Face Hub (model weights) | Google Edge TTS (voices) | spaCy models | Tesseract OCR engine</text>
+
+  <!-- Flow arrows -->
+  <!-- Frontend to API -->
+  <line x1="600" y1="170" x2="600" y2="185" class="solid-arrow"/>
+  <text x="615" y="178" class="small">HTTP/HTTPS REST/JSON</text>
+
+  <!-- API to Services -->
+  <line x1="600" y1="255" x2="600" y2="270" class="solid-arrow"/>
+  <text x="615" y="263" class="small">Internal service calls</text>
+
+  <!-- Services to Data Layer -->
+  <line x1="230" y1="445" x2="230" y2="500" class="dashed"/>
+  <text x="245" y="473" class="small">SQLModel / SQLAlchemy</text>
+
+  <line x1="230" y1="460" x2="230" y2="500" class="dashed"/>
+
+  <line x1="770" y1="445" x2="770" y2="500" class="dashed"/>
+  <text x="785" y="473" class="small">file I/O</text>
+
+  <!-- External API arrows -->
+  <line x1="170" y1="575" x2="170" y2="535" class="dashed"/>
+  <text x="185" y="555" class="small">model weights</text>
+
+  <line x1="870" y1="575" x2="870" y2="535" class="dashed"/>
+  <line x1="820" y1="550" x2="820" y2="535" class="dashed"/>
+
+  <!-- Legend -->
+  <rect x="880" y="640" width="300" height="110" rx="5" fill="#fef9e7" stroke="#333" stroke-width="1"/>
+  <text x="1030" y="660" text-anchor="middle" class="header">Layer Legend</text>
+  <rect x="900" y="675" width="15" height="15" fill="#e8f4f8" stroke="#333" stroke-width="1"/>
+  <text x="925" y="687" class="small">Client / UI</text>
+  <rect x="900" y="695" width="15" height="15" fill="#fff3cd" stroke="#333" stroke-width="1"/>
+  <text x="925" y="707" class="small">API Gateway</text>
+  <rect x="900" y="715" width="15" height="15" fill="#f1f8e9" stroke="#333" stroke-width="1"/>
+  <text x="925" y="727" class="small">Services</text>
+  <rect x="900" y="735" width="15" height="15" fill="#f8d7da" stroke="#333" stroke-width="1"/>
+  <text x="925" y="747" class="small">Data Layer</text>
+  <rect x="1000" y="675" width="15" height="15" fill="#e2d9f3" stroke="#333" stroke-width="1"/>
+  <text x="1025" y="687" class="small">External APIs</text>
+
+  <!-- Stack notes -->
+  <text x="50" y="635" class="small">Backend: Python 3.11 | FastAPI 0.115 | Uvicorn 0.32</text>
+  <text x="50" y="650" class="small">Frontend: React 19 | TypeScript 6 | Vite 8 | Tailwind 3</text>
+  <text x="50" y="665" class="small">NLP: spaCy 3.8 | transformers 4.49 | torch 2.5 | sentencepiece 0.2</text>
+
+</svg>
