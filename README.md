@@ -19,6 +19,8 @@ A modular architecture with a React frontend and FastAPI backend:
 - **LLM-based text simplification** with fact preservation validation (Gemini / OpenAI / Groq / OpenRouter / Mock)
 - **Rate-limit aware provider fallback**: bounded retries with exponential backoff and jitter that respect the provider's own `Retry-After` hint, so a long document survives a tokens-per-minute limit instead of failing
 - **Structured information extraction** (deadlines, eligibility, amounts, etc.)
+- **Fidelity validation** that checks the simplified text did not *add* anything: page markers turned into instructions, dropped qualifiers ("normally"), swapped entity types ("university" → "school") and invented numbers
+- **Consistent structured extraction** that returns complete statements instead of fragments, ignores section headings and page markers, and understands Roman-numeral clauses
 - **Cross-document fact validation** across original, simplified, and structured text
 - **Readability analysis** (Flesch Reading Ease, Flesch-Kincaid Grade Level)
 - **Translation** between English and Kannada (NLLB-200 model)
@@ -395,6 +397,17 @@ extension.
 `POST /api/documents/readability`, `POST /api/translate`, `POST /api/tts` and
 `GET /api/media/audio/{filename}`.
 
+### Extension Instant Summary and Markdown
+The "Instant Summary" card is built from the structured extraction and the
+fact-preservation list. It only shows complete statements or short labels:
+section headings and page markers are never facts, a sentence that merely
+mentions a document is not shown as a document, and the same statement is never
+shown twice. When nothing can be extracted with confidence the card says so
+instead of showing malformed bullets.
+
+The simplified text is parsed into a node tree and rendered as React elements,
+so Markdown renders correctly while model output is never injected as HTML.
+
 ### Extension Known Limitations
 - **Hindi is not available**: the backend translation model validates the
   language code against `['en', 'kn']`, so the Hindi option is shown disabled
@@ -406,8 +419,44 @@ extension.
   text; otherwise the card says "Grade not measured".
 - The `Alt+S` shortcut uses `chrome.action.openPopup()` and needs Chrome 127+.
 
-## Rate-Limit Handling (long documents)
+## Fidelity Validation (no invented facts)
 
+A simplification that reads well can still be wrong. Saral checks the simplified
+text against the source in both directions:
+
+* **Fact preservation** (existing): dates, amounts, percentages, ages and
+  quantities from the source must still be present.
+* **Fidelity checks** (new, `backend/app/services/text_fidelity.py`): the
+  simplified text must not *add* anything the source does not state.
+
+| Problem | Example | How it is caught |
+| --- | --- | --- |
+| A page marker becomes an instruction | "You must declare on Page 4 of 7 of your application" | Page references that only exist as pagination artifacts are reported, and any page reference that turned into an instruction is reported |
+| Certainty is upgraded | "normally announced" → "will be announced" | A hedge from the source that is missing from the output is reported, along with the definiteness marker that replaced it |
+| A condition is dropped | "subject to the condition that ..." removed entirely | Reported when the output contains no conditional construction at all |
+| An entity is swapped | "university/college/institute" → "school" | Reported when one member of an organisation family replaces another |
+| An obligation invents a number | "You must pay Rs. 500 by 30 June" | Reported when a number in an obligation does not occur in the source |
+
+Two preventive steps back this up:
+
+1. **Artifacts are removed before the model sees the text.** Standalone
+   pagination lines ("Page 4 of 7", "--- Page 3 (text) ---") are stripped, so
+   the model can never turn them into content.
+2. **The prompt states the rules** - ignore artifacts, keep qualifiers, keep
+   the exact kind of organisation, and never add a step the source does not
+   state.
+
+Any issue found is returned in `validation_failures` and flips
+`validation_passed` to `false`. Both the website and the extension show the
+specific reasons, so a simplified document is never presented as fully
+validated just because it is readable.
+
+**This is a safety net, not a guarantee.** The checks look for specific,
+recognisable failure patterns; they cannot prove that a reworded sentence
+means exactly what the original meant. The original document always remains
+the authority.
+
+## Rate-Limit Handling (long documents)
 A long government notice is split into chunks and each chunk is sent to the LLM
 provider separately. Providers meter this against a per-minute token budget
 (Groq allows 8,000 tokens per minute on the free tier), so a long notice can
@@ -458,16 +507,17 @@ validated, and the response reports `validation_passed` and
 cd backend
 python -m pytest tests/ -v
 ```
-- **Total Tests**: 383 (+1 skipped when a local origin is not on the configured allow-list)
-- **Passing**: 383
+- **Total Tests**: 430 (+1 skipped when a local origin is not on the configured allow-list)
+- **Passing**: 430
 - **Failing**: 0
 - **Test Coverage**: ~70% across all modules
 
 **Extension Tests:**
 ```bash
 cd extension
-npm test                # 56 unit tests (node:test)
+npm test                # 94 unit tests (node:test)
 npm run verify:backend  # 31 live checks against a running backend
+npm run verify:scholarship # live Instant Summary check against a running backend
 ```
 - `src/__tests__/config.test.ts` — backend URL validation, limits, language support (13)
 - `src/__tests__/extractor.test.ts` — text cleaning, truncation, selection priority (11)
@@ -475,15 +525,32 @@ npm run verify:backend  # 31 live checks against a running backend
 - `src/__tests__/errors.test.ts` — HTTP status to user-message mapping (10)
 - `src/__tests__/api.test.ts` — request building and error handling against a stubbed `fetch` (8)
 - `src/__tests__/guards.test.ts` — duplicate-submission guard (4)
+- `src/__tests__/markdown.test.ts` — Markdown parsing, escape artefacts, HTML safety (23)
+- `src/__tests__/factsSummary.test.ts` — Instant Summary quality, duplicated labels, headings, page markers (15)
 
-**Backend rate-limit tests** (`backend/tests/test_llm_retry.py`, 37 tests):
-- Groq 429 followed by a successful retry, honouring the provider's retry delay
+**Backend rate-limit tests** (`backend/tests/test_llm_retry.py`, 37 tests):- Groq 429 followed by a successful retry, honouring the provider's retry delay
 - Groq 429 followed by a successful fallback provider
 - Gemini 503 `UNAVAILABLE` followed by recovery
 - All providers unavailable after the retry budget is exhausted
 - A failed chunk is never reported as a successful simplification
 - Fact validation still runs on the combined chunked output
 - One user action runs the pipeline exactly once (no duplicate processing)
+
+**Backend fidelity tests** (`backend/tests/test_text_fidelity.py`, 31 tests):
+- A page marker ("Page 4 of 7") is stripped before the model sees the text
+- A page marker turned into an instruction is detected and reported
+- "normally" being dropped and replaced by "will" is detected
+- "university/college/institute" being replaced by "school" is detected
+- A faithful simplification raises no issue
+- The endpoint reports `validation_passed: false` with the specific reasons
+
+**Backend extraction quality tests** (`backend/tests/test_extraction_quality.py`, 14 tests):
+- A section heading is never returned as a procedure step
+- A page marker is never returned as a fact, while dates, amounts, percentages
+  and age limits are still extracted
+- Eligibility requirements and conditions are complete statements
+- The nine Roman-numeral clauses of a scholarship notice are captured as steps
+- Document names are short noun phrases, not sentence fragments
 
 **Live API Testing (M12 Verification):**
 8 of 16 endpoints verified with live HTTP requests:

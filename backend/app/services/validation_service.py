@@ -10,6 +10,7 @@ from datetime import datetime
 
 from app.schemas.simplification import PreservedFact
 from app.core.logging import get_logger
+from app.services.text_fidelity import validate_fidelity
 
 logger = get_logger(__name__)
 
@@ -392,6 +393,12 @@ def validate_final_response(response_data: Dict[str, Any]) -> Dict[str, Any]:
     # Validate quality
     quality_issues = validate_simplification_quality(original_text, simplified_text)
     validation_failures.extend(quality_issues)
+
+    # Validate that the simplified text did not add anything the source does
+    # not state (page markers turned into instructions, dropped qualifiers,
+    # swapped entity types, invented numbers).
+    fidelity_issues = validate_fidelity(original_text, simplified_text)
+    validation_failures.extend(fidelity_issues)
 
     # Update response data
     response_data["preserved_facts"] = preserved_facts

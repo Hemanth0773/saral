@@ -22,7 +22,7 @@ import {
   joinUrl,
 } from '../shared/config';
 import { describeError, toSaralError } from '../shared/errors';
-import { buildFactList } from '../shared/facts';
+import { buildFactSummary } from '../shared/facts';
 import type {
   ExtractionResponse,
   ReadabilityResponse,
@@ -377,12 +377,8 @@ export default function App() {
     void chrome.tabs.create({ url: chrome.runtime.getURL('help.html') });
   }, []);
 
-  const facts = useMemo(
-    () =>
-      buildFactList(
-        structured?.structured_information,
-        simplification?.preserved_facts,
-      ),
+  const factSummary = useMemo(
+    () => buildFactSummary(structured?.structured_information, simplification?.preserved_facts),
     [simplification, structured],
   );
 
@@ -463,7 +459,8 @@ export default function App() {
               translatedLanguageLabel={
                 translation ? `Translation · ${translation.target_language.toUpperCase()}` : null
               }
-              facts={facts}
+              facts={factSummary.facts}
+              hiddenFacts={factSummary.hidden}
               gradeLabel={gradeLabel}
               validationPassed={simplification.validation_passed}
               validationFailures={simplification.validation_failures}

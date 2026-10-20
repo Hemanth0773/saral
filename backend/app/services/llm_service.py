@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.schemas.simplification import SimplificationResponse
 from app.services import llm_retry
+from app.services.text_fidelity import strip_document_artifacts
 
 logger = get_logger(__name__)
 
@@ -123,19 +124,25 @@ CRITICAL RULES:
 5. If a technical or legal term cannot be simplified, keep it but add a brief explanation.
 6. Do not provide legal advice or interpret ambiguous legal language as fact.
 7. If the source text is unclear, preserve the uncertainty instead of guessing.
+8. IGNORE document artifacts. Page numbers, page markers (such as "Page 4 of 7" or "--- Page 3 ---"), running headers, footers and page-break text are NOT content. Never repeat them and never turn them into an instruction, a step or a requirement.
+9. NEVER add anything the source does not state. Do not invent steps, headings, procedures, documents, deadlines, amounts, contacts or conditions. If the source does not mention something, leave it out.
+10. KEEP the certainty of the source. Words such as "normally", "usually", "generally", "in principle", "as far as possible", "expected to", "may", "subject to", "provided that", "only if" and "except" carry legal meaning. Never drop them and never turn them into "will", "must" or "always".
+11. Do not change the kind of organisation. If the source says "university", "college" or "institute", keep that exact word - never replace it with "school", and never replace "school" with "college".
+12. NEVER turn a statement about the document into a statement about what the reader must do. "It is declared in the application" stays about the application, and must not become "you must declare it in section 4 of the form".
 
 SIMPLIFICATION GUIDELINES:
 1. Break long sentences into shorter, clearer sentences.
 2. Replace unnecessarily complex words with simpler synonyms when meaning remains unchanged.
 3. Use active voice where it improves clarity.
-4. Add headings and bullet points where appropriate to improve readability.
+4. Use headings or bullet points only to mirror structure that already exists in the source, and never to invent new sections.
 5. Keep paragraphs focused on a single topic.
-6. Use second-person ("you") when referring to the reader/applicant.
+6. Use second-person ("you") when referring to the reader/applicant, but only for what the source actually requires.
 7. Aim for reading grade level specified by the user.
 
 FORMAT INSTRUCTIONS:
 - Return only the simplified text without commentary.
 - Preserve all important factual information exactly as it appears.
+- Keep every condition, exception, qualifier and obligation from the source.
 - Use clear, plain language appropriate for the target grade level."""
 
     def _raise_provider_error(self, response: Any, provider_name: str) -> None:
@@ -171,6 +178,25 @@ FORMAT INSTRUCTIONS:
             raise LLMTransientError(error_msg, retry_after=retry_after)
         raise LLMServiceError(error_msg, retry_after=retry_after)
 
+    def _require_text(self, text: str, provider_name: str) -> str:
+        """
+        Treats an empty completion as a failure.
+
+        A reasoning model can spend its whole output budget on internal
+        reasoning and return an empty answer. Returning that as a successful
+        simplification would silently drop the document, so it is raised as an
+        error and the retry policy can act on it.
+        """
+        cleaned = (text or "").strip()
+        if not cleaned:
+            error_msg = (
+                f"{provider_name} returned an empty completion. The model may have used "
+                "its whole output budget while reasoning."
+            )
+            logger.error(error_msg)
+            raise LLMServiceError(error_msg)
+        return cleaned
+
     def _build_simplification_prompt(self, text: str, target_grade_level: int) -> str:
         """Build the user prompt for simplification"""
         return f"""Simplify the following government document text to a reading grade level of {target_grade_level} while preserving all critical factual information.
@@ -184,10 +210,15 @@ CRITICAL INFORMATION TO PRESERVE EXACTLY:
 - All eligibility requirements
 - All required documents
 - All important conditions and exceptions
+- All qualifiers of certainty (such as "normally", "usually", "in principle", "as far as possible", "expected to", "may")
+- All conditional phrases (such as "subject to", "provided that", "only if", "except", "at the discretion of")
 - All contact information (if present)
 - All organization and scheme names
+- The exact kind of organisation mentioned (university, college, institute, school, ministry, department, board, authority)
 
-IMPORTANT: Do not change any numbers, dates, or factual information.
+IMPORTANT: Do not change any numbers, dates, or factual information. Do not remove or upgrade any qualifier, condition or exception. Do not add any instruction, step or requirement that the text does not state.
+
+DOCUMENT ARTIFACTS: any page number, page marker (for example "Page 4 of 7"), header, footer or page-break text in the text below is a printing artifact and not content. Leave it out completely. Never turn it into an instruction or a step.
 
 Original text:
 ```
@@ -209,10 +240,15 @@ CRITICAL INFORMATION TO PRESERVE EXACTLY:
 - All eligibility requirements
 - All required documents
 - All important conditions and exceptions
+- All qualifiers of certainty (such as "normally", "usually", "in principle", "as far as possible", "expected to", "may")
+- All conditional phrases (such as "subject to", "provided that", "only if", "except", "at the discretion of")
 - All contact information (if present)
 - All organization and scheme names
+- The exact kind of organisation mentioned (university, college, institute, school, ministry, department, board, authority)
 
-IMPORTANT: Do not change any numbers, dates, or factual information.
+IMPORTANT: Do not change any numbers, dates, or factual information. Do not remove or upgrade any qualifier, condition or exception. Do not add any instruction, step or requirement that the text does not state.
+
+DOCUMENT ARTIFACTS: any page number, page marker (for example "Page 4 of 7"), header, footer or page-break text in the text below is a printing artifact and not content. Leave it out completely. Never turn it into an instruction or a step.
 
 Original text:
 ```
@@ -290,7 +326,9 @@ class OpenAIProvider(LLMProvider):
                     self._raise_provider_error(response, "OpenAI")
 
                 result = response.json()
-                simplified_text = result["choices"][0]["message"]["content"].strip()
+                simplified_text = self._require_text(
+                    result["choices"][0]["message"]["content"], "OpenAI"
+                )
 
                 logger.info(f"OpenAI simplification successful (tokens: {result['usage']['total_tokens']})")
                 return simplified_text
@@ -351,7 +389,9 @@ class OpenAIProvider(LLMProvider):
                     self._raise_provider_error(response, "OpenAI")
 
                 result = response.json()
-                response_text = result["choices"][0]["message"]["content"].strip()
+                response_text = self._require_text(
+                    result["choices"][0]["message"]["content"], "OpenAI"
+                )
 
                 try:
                     structured_result = json.loads(response_text)
@@ -644,7 +684,9 @@ class GeminiProvider(LLMProvider):
 
                 # Extract text from Gemini response
                 try:
-                    simplified_text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    simplified_text = self._require_text(
+                        result["candidates"][0]["content"]["parts"][0]["text"], "Gemini"
+                    )
                     logger.info(f"Gemini simplification successful")
                     return simplified_text
                 except (KeyError, IndexError, TypeError) as e:
@@ -745,7 +787,9 @@ class GeminiProvider(LLMProvider):
                 result = response.json()
 
                 try:
-                    response_text = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    response_text = self._require_text(
+                        result["candidates"][0]["content"]["parts"][0]["text"], "Gemini"
+                    )
 
                     # Try to parse JSON response
                     try:
@@ -841,7 +885,9 @@ class GroqProvider(LLMProvider):
                     self._raise_provider_error(response, "Groq")
 
                 result = response.json()
-                simplified_text = result["choices"][0]["message"]["content"].strip()
+                simplified_text = self._require_text(
+                    result["choices"][0]["message"]["content"], "Groq"
+                )
 
                 logger.info(f"Groq simplification successful")
                 return simplified_text
@@ -902,7 +948,9 @@ class GroqProvider(LLMProvider):
                     self._raise_provider_error(response, "Groq")
 
                 result = response.json()
-                response_text = result["choices"][0]["message"]["content"].strip()
+                response_text = self._require_text(
+                    result["choices"][0]["message"]["content"], "Groq"
+                )
 
                 try:
                     structured_result = json.loads(response_text)
@@ -999,7 +1047,9 @@ class OpenRouterProvider(LLMProvider):
                     self._raise_provider_error(response, "OpenRouter")
 
                 result = response.json()
-                simplified_text = result["choices"][0]["message"]["content"].strip()
+                simplified_text = self._require_text(
+                    result["choices"][0]["message"]["content"], "OpenRouter"
+                )
 
                 logger.info(f"OpenRouter simplification successful")
                 return simplified_text
@@ -1060,7 +1110,9 @@ class OpenRouterProvider(LLMProvider):
                     self._raise_provider_error(response, "OpenRouter")
 
                 result = response.json()
-                response_text = result["choices"][0]["message"]["content"].strip()
+                response_text = self._require_text(
+                    result["choices"][0]["message"]["content"], "OpenRouter"
+                )
 
                 try:
                     structured_result = json.loads(response_text)
@@ -1442,7 +1494,20 @@ async def _generate_simplification_response_async(text: str, target_grade_level:
 
     provider = get_llm_provider()
     policy = _build_retry_policy()
-    chunks = chunk_text_for_simplification(text, settings.CHUNK_SIZE)
+
+    # Page markers, running headers and footers are printing artifacts, not
+    # content. Removing them before the model sees the text is the reliable
+    # way to stop a page reference such as "Page 4 of 7" from being turned
+    # into an application instruction.
+    llm_text, stripped_artifacts = strip_document_artifacts(text)
+    if stripped_artifacts:
+        logger.info(
+            f"Removed {len(stripped_artifacts)} document artifact line(s) before simplification."
+        )
+    if not llm_text.strip():
+        llm_text = text
+
+    chunks = chunk_text_for_simplification(llm_text, settings.CHUNK_SIZE)
     chain = _build_provider_chain(provider)
 
     key_terms: List[str] = []
@@ -1470,7 +1535,7 @@ async def _generate_simplification_response_async(text: str, target_grade_level:
         simplified_text = "\n\n".join(simplified_chunks)
     else:
         simplified_text, structured, failed_attempts, used_provider = await _simplify_with_fallback(
-            text, target_grade_level, chain, policy, deadline, prefer_structured=True
+            llm_text, target_grade_level, chain, policy, deadline, prefer_structured=True
         )
         retry_count += failed_attempts
         if used_provider is not provider:

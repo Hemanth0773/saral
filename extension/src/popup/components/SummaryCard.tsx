@@ -3,6 +3,7 @@ import type { FactItem } from '../../shared/facts';
 import type { LanguageOption, UnavailableLanguageOption } from '../../shared/config';
 import AudioDeck from './AudioDeck';
 import FactList from './FactList';
+import Markdown from './Markdown';
 import { CheckCircleIcon, CheckIcon, CopyIcon, WarningIcon } from './Icons';
 
 type SummaryCardProps = {
@@ -10,6 +11,7 @@ type SummaryCardProps = {
   translatedText: string | null;
   translatedLanguageLabel: string | null;
   facts: FactItem[];
+  hiddenFacts?: number;
   gradeLabel: string | null;
   validationPassed: boolean;
   validationFailures: string[];
@@ -33,6 +35,7 @@ export default function SummaryCard({
   translatedText,
   translatedLanguageLabel,
   facts,
+  hiddenFacts = 0,
   gradeLabel,
   validationPassed,
   validationFailures,
@@ -79,17 +82,16 @@ export default function SummaryCard({
       </div>
 
       {/* ---- Important facts ---- */}
-      <FactList facts={facts} />
+      <FactList facts={facts} hidden={hiddenFacts} />
 
       {/* ---- Simplified text ---- */}
       <div className="rounded-lg border-2 border-saral-ink/15 bg-saral-lavender p-2.5">
-        <p
-          className={`scroll-area whitespace-pre-wrap text-[12px] font-medium leading-relaxed text-saral-ink ${
-            isExpanded ? '' : 'max-h-[150px] overflow-y-auto'
+        <Markdown
+          text={simplifiedText}
+          className={`text-[12px] font-medium leading-relaxed text-saral-ink ${
+            isExpanded ? '' : 'scroll-area max-h-[170px] overflow-y-auto'
           }`}
-        >
-          {simplifiedText}
-        </p>
+        />
         {simplifiedText.length > 420 ? (
           <button
             type="button"
@@ -107,9 +109,10 @@ export default function SummaryCard({
           <p className="mb-1 text-[9px] font-extrabold uppercase tracking-wider text-saral-ink/50">
             {translatedLanguageLabel ?? 'Translation'}
           </p>
-          <p className="scroll-area max-h-[130px] overflow-y-auto whitespace-pre-wrap text-[12px] font-medium leading-relaxed text-saral-ink">
-            {translatedText}
-          </p>
+          <Markdown
+            text={translatedText}
+            className="scroll-area max-h-[140px] overflow-y-auto text-[12px] font-medium leading-relaxed text-saral-ink"
+          />
         </div>
       ) : null}
 
@@ -181,16 +184,27 @@ export default function SummaryCard({
       </p>
 
       {!validationPassed && validationFailures.length ? (
-        <p
+        <div
           role="status"
-          className="flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-[10px] font-bold text-amber-800"
+          className="rounded-lg bg-amber-50 p-2 text-[10px] font-bold text-amber-800"
         >
-          <WarningIcon className="mt-0.5 shrink-0 text-[13px]" aria-hidden="true" />
-          <span>
-            Saral could not confirm that every fact was preserved
-            {validationFailures.length ? `: ${validationFailures.slice(0, 2).join('; ')}` : '.'}
-          </span>
-        </p>
+          <p className="flex items-start gap-1.5">
+            <WarningIcon className="mt-0.5 shrink-0 text-[13px]" aria-hidden="true" />
+            <span>Saral flagged issues in this simplification. Check it against the original.</span>
+          </p>
+          <ul className="mt-1 list-disc pl-4">
+            {validationFailures.slice(0, 3).map((failure) => (
+              <li key={failure} className="mt-0.5 leading-snug">
+                {failure}
+              </li>
+            ))}
+          </ul>
+          {validationFailures.length > 3 ? (
+            <p className="mt-1 pl-4">
+              +{validationFailures.length - 3} more issue(s) found in the source comparison.
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </section>
   );

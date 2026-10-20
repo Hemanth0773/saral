@@ -2,8 +2,9 @@
  * Turns the backend's structured extraction and the simplification fact list
  * into a compact set of display items for the "Instant Summary" card.
  *
- * Everything rendered here comes from an actual backend response — no value is
- * ever invented to fill a gap in the UI.
+ * Everything rendered here comes from an actual backend response - no value is
+ * ever invented to fill a gap in the UI. Items that are not trustworthy
+ * (page markers, fragments, headings) are dropped rather than shown.
  */
 import type { PreservedFact, StructuredInformation } from '../types/api';
 
@@ -42,15 +43,87 @@ const PRESERVED_FACT_LABELS: Record<string, { label: string; kind: FactKind }> =
   other: { label: 'Key point', kind: 'other' },
 };
 
+/** Maximum number of document names shown in one bullet. */
+export const MAX_DOCUMENT_NAMES = 5;
+
+/** Maximum number of summary bullets rendered in the popup card. */
+export const MAX_SUMMARY_FACTS = 10;
+
+/** "Page 5 of 7" and friends are pagination, never a fact. */
+const PAGE_MARKER_PATTERN = /^\s*pages?\s+\d+(\s*(of|out\s+of)\s*\d+)?\s*\.?$/i;
+
+/** A heading such as "PROCEDURE FOR AVAILING THE SCHOLARSHIP" is not a fact. */
+const ALL_CAPS_HEADING_PATTERN = /^[A-Z][A-Z ,.'()/&-]*$/;
+
+/**
+ * True when the value cannot be shown as a trustworthy fact.
+ *
+ * Document names are checked separately, because a short name such as "PAN"
+ * is a perfectly good fact.
+ */
+export function isUnusableValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length < 4) return true;
+  if (PAGE_MARKER_PATTERN.test(trimmed)) return true;
+  // A value made only of punctuation carries no information.
+  if (!/[a-z0-9]/i.test(trimmed)) return true;
+  return false;
+}
+
+function isHeading(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length < 5) return false;
+  // A heading is written in capitals, has no digits and has more than one word.
+  if (/[0-9]/.test(trimmed)) return false;
+  if (!ALL_CAPS_HEADING_PATTERN.test(trimmed)) return false;
+  return trimmed.includes(' ');
+}
+
+function normaliseForComparison(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s₹%]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * True when the candidate says the same thing as something already shown.
+ *
+ * The same statement often appears twice: once as a procedure step and once as
+ * an eligibility rule. Showing it twice makes the summary look repetitive and
+ * wastes the limited space in the popup.
+ */
+export function isDuplicateOf(candidate: string, existing: string[]): boolean {
+  const normalised = normaliseForComparison(candidate);
+  if (!normalised) return false;
+
+  return existing.some((other) => {
+    const otherNormalised = normaliseForComparison(other);
+    if (!otherNormalised) return false;
+    if (normalised === otherNormalised) return true;
+    // Only compare full sentences, never short labels such as "Aadhaar".
+    if (normalised.length < 20 || otherNormalised.length < 20) return false;
+    return normalised.includes(otherNormalised) || otherNormalised.includes(normalised);
+  });
+}
+
 function pushItem(items: FactItem[], item: FactItem): void {
-  if (!item.value && !item.text) return;
-  const duplicate = items.some(
-    (existing) =>
-      existing.kind === item.kind &&
-      existing.value.toLowerCase() === item.value.toLowerCase() &&
-      existing.text.toLowerCase() === item.text.toLowerCase(),
-  );
-  if (!duplicate) items.push(item);
+  const trimmed = item.value.trim();
+  // A pagination marker is never a fact, whatever the category is.
+  if (PAGE_MARKER_PATTERN.test(trimmed)) return;
+  // A document name can be short ("PAN"); anything else needs some substance.
+  if (item.kind !== 'document' && trimmed.length < 4) return;
+  if (!/[a-z0-9]/i.test(trimmed)) return;
+  if (isHeading(trimmed)) return;
+  if (isDuplicateOf(item.value, items.map((existing) => existing.value))) return;
+  items.push(item);
+}
+
+function formatDocumentNames(names: string[]): string {
+  if (names.length <= MAX_DOCUMENT_NAMES) return names.join(', ');
+  const shown = names.slice(0, MAX_DOCUMENT_NAMES).join(', ');
+  return `${shown} and ${names.length - MAX_DOCUMENT_NAMES} more`;
 }
 
 /** Facts derived from `POST /api/documents/extract-info`. */
@@ -86,7 +159,7 @@ export function factsFromStructured(info: StructuredInformation | undefined): Fa
       id: 'documents',
       kind: 'document',
       label: 'Documents needed',
-      value: documents.join(', '),
+      value: formatDocumentNames(documents),
       text: documents.join(', '),
       severity: 'info',
     });
@@ -197,31 +270,50 @@ export function factsFromPreserved(preserved: PreservedFact[] | undefined): Fact
   return items;
 }
 
+export interface FactSummary {
+  /** The bullets to render, already capped. */
+  facts: FactItem[];
+  /** How many trustworthy facts were found before the cap. */
+  total: number;
+  /** How many facts did not fit into the card. */
+  hidden: number;
+}
+
 /**
- * Merges both sources, preferring the structured extraction.
+ * Builds the summary bullets.
  *
  * The structured extraction is authoritative for the kinds it covers, so a
  * preserved fact of an already covered kind is dropped instead of being shown
- * twice (the two sources spell the same fact differently, e.g. `2026-12-31`
- * versus `31 December 2026`).
+ * twice. Items that repeat an earlier statement are dropped as well.
+ */
+export function buildFactSummary(
+  info: StructuredInformation | undefined,
+  preserved: PreservedFact[] | undefined,
+  limit: number = MAX_SUMMARY_FACTS,
+): FactSummary {
+  const merged = factsFromStructured(info);
+  const coveredKinds = new Set(merged.map((item) => item.kind));
+
+  for (const fact of factsFromPreserved(preserved)) {
+    if (fact.kind !== 'other' && coveredKinds.has(fact.kind)) continue;
+    merged.push(fact);
+  }
+
+  const total = merged.length;
+  return {
+    facts: merged.slice(0, limit),
+    total,
+    hidden: Math.max(0, total - limit),
+  };
+}
+
+/**
+ * Backwards compatible helper that returns only the bullets.
  */
 export function buildFactList(
   info: StructuredInformation | undefined,
   preserved: PreservedFact[] | undefined,
-  limit = 8,
+  limit: number = MAX_SUMMARY_FACTS,
 ): FactItem[] {
-  const merged = factsFromStructured(info);
-  const coveredKinds = new Set(merged.map((item) => item.kind));
-  const seen = new Set(merged.map((item) => `${item.kind}:${item.value.toLowerCase()}`));
-
-  for (const fact of factsFromPreserved(preserved)) {
-    if (fact.kind !== 'other' && coveredKinds.has(fact.kind)) continue;
-
-    const key = `${fact.kind}:${fact.value.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(fact);
-  }
-
-  return merged.slice(0, limit);
+  return buildFactSummary(info, preserved, limit).facts;
 }

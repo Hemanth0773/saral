@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildFactList, factsFromPreserved, factsFromStructured } from '../shared/facts.ts';
+import { buildFactList, buildFactSummary, factsFromPreserved, factsFromStructured, MAX_SUMMARY_FACTS } from '../shared/facts.ts';
 import type { StructuredInformation } from '../types/api.ts';
 
 const emptyInfo: StructuredInformation = {
@@ -126,7 +126,11 @@ test('the fact list is capped so the popup stays compact', () => {
     preserved_in_simplified: true,
   }));
 
-  assert.equal(buildFactList(undefined, preserved).length, 8);
+  const summary = buildFactSummary(undefined, preserved);
+
+  assert.equal(summary.facts.length, MAX_SUMMARY_FACTS);
+  assert.equal(summary.total, 30);
+  assert.equal(summary.hidden, 30 - MAX_SUMMARY_FACTS);
 });
 
 test('no backend data means no facts are invented', () => {

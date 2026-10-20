@@ -30,6 +30,115 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 
+# ============================================================
+# Shared helpers
+# ============================================================
+
+# A standalone pagination marker such as "Page 5 of 7" is never a fact.
+PAGE_MARKER_RE = re.compile(
+    r"^\s*pages?\s+\d+(?:\s*(?:of|out\s+of|/)\s+\d+)?\s*\.?\s*$",
+    re.IGNORECASE,
+)
+
+# Words that show a fragment is a clause rather than the name of a document.
+CLAUSE_WORDS_RE = re.compile(
+    r"\b(shall|must|will|should|would|may|might|can|could|is|are|was|were|be|been|"
+    r"being|has|have|had|do|does|did|require|requires|required|need|needs|"
+    r"applicant|applicants|student|students|institution|institutions|commission|"
+    r"portal|government|authority)\b",
+    re.IGNORECASE,
+)
+
+# Words that show a statement is an action somebody has to take.
+ACTION_WORD_RE = re.compile(
+    r"\b(shall|must|will|should|may|can|could|is|are|was|were|has|have|had|need|needs|"
+    r"required|require|requires|apply|applies|applied|submit|submits|submitted|"
+    r"upload|uploads|uploaded|send|sends|sent|provide|provides|provided|"
+    r"furnish|furnishes|furnished|attach|attaches|attached|obtain|obtains|obtained|"
+    r"collect|download|print|fill|write|verify|verifies|verified|ensure|ensures|"
+    r"deposit|remit|register|pay|pays|paid|claim|generate|forward|transmit|"
+    r"retain|retains|produce|produces|approach|contact|comply|eligible|entitled|"
+    r"responsible|liable|reject|rejected|accept|accepted|complete|completing|"
+    r"ask|asked|notified|remain|open|prohibited|permitted)\b",
+    re.IGNORECASE,
+)
+
+# A document name is short; a long span is a sentence, not a name.
+MAX_DOCUMENT_NAME_LENGTH = 60
+
+
+def _is_page_marker(text: str) -> bool:
+    """True when the text is only a pagination marker."""
+    return bool(PAGE_MARKER_RE.match(text.strip()))
+
+
+def _is_heading(text: str) -> bool:
+    """True when the text looks like a section heading rather than a statement."""
+    letters = [char for char in text if char.isalpha()]
+    if len(letters) < 3:
+        return False
+    return all(char.isupper() for char in letters)
+
+
+def _clean_fragment(text: str) -> str:
+    """Removes leading and trailing punctuation and list noise from a fragment."""
+    cleaned = text.strip()
+    cleaned = re.sub(r"^[\s,;:\-–—•*]+", "", cleaned)
+    cleaned = re.sub(r"[\s,;:\-–—•*]+$", "", cleaned)
+    return cleaned.strip()
+
+
+def _clean_list_item(text: str) -> str:
+    """
+    Cleans one item of a list.
+
+    A list item may start with the conjunction that joined it to the previous
+    item ("and bank account details"), which has to go. This is deliberately
+    separate from :func:`_clean_fragment`, which must never remove the first
+    word of a sentence.
+    """
+    cleaned = _clean_fragment(text)
+    cleaned = re.sub(r"^(?:and|or)\s+", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
+def _first_sentence(text: str) -> str:
+    """Returns the first sentence of a piece of text."""
+    match = re.search(r"[.!?](\s|$)", text)
+    if match:
+        return text[: match.end()].strip()
+    return text.strip()
+
+
+def _sentence_around(text: str, start: int, end: int) -> str:
+    """
+    Returns the sentence that contains the given span.
+
+    Used to turn a matched keyword into a complete statement instead of a
+    fragment that stops at the end of a line.
+    """
+    left = 0
+    index = start - 1
+    while index >= 0:
+        char = text[index]
+        if char in ".!?":
+            if index + 1 >= len(text) or text[index + 1].isspace():
+                left = index + 1
+                break
+        elif char == "\n":
+            if index + 1 < len(text) and text[index + 1] in "\r\n":
+                left = index + 1
+                break
+        index -= 1
+
+    right = len(text)
+    match = re.search(r"[.!?](\s|$)|\n[ \t]*\r?\n", text[end:])
+    if match:
+        right = end + match.start() + 1
+
+    return text[left:right].strip()
+
+
 def extract_structured_information(text: str, extract_title: bool = True, extract_summary: bool = True) -> StructuredInformation:
     """
     Extract structured information from text.
@@ -231,12 +340,19 @@ def extract_required_documents(text: str) -> List[ExtractedDocument]:
             doc_items = re.split(r'[,;]\s+', match_text)
 
             for item in doc_items:
-                item = item.strip()
-                if not item or len(item) < 2:
+                item = _clean_list_item(item)
+                if len(item) < 2:
                     continue
 
-                # Remove trailing punctuation
-                item = re.sub(r'[,;.!?]+$', '', item).strip()
+                # A document name is a short noun phrase. A long span, or one
+                # that contains a clause, is a sentence that merely mentions a
+                # document and must not become a bullet of its own.
+                if len(item) > MAX_DOCUMENT_NAME_LENGTH:
+                    continue
+                if CLAUSE_WORDS_RE.search(item):
+                    continue
+                if _is_page_marker(item) or _is_heading(item):
+                    continue
 
                 if item not in extracted_text:
                     extracted_text.add(item)
@@ -524,30 +640,37 @@ def extract_eligibility_requirements(text: str) -> List[ExtractedRequirement]:
     """Extract eligibility requirements."""
     requirements = []
 
-    # Patterns for eligibility
+    # Patterns that introduce an eligibility statement. The matched span is
+    # expanded to the surrounding sentence so the requirement is a complete
+    # statement rather than a fragment that stops at the end of a line.
     eligibility_patterns = [
-        r'(?:eligible|eligibility)[:\s]+([^.!?\n]+)',
-        r'(?:must|should)\s+(?:be|have)\s+([^.!?\n]+)',
-        r'(?:candidates?|applicants?)\s+(?:must|should)\s+([^.!?\n]+)',
+        r'(?:eligible|eligibility)[:\s]+',
+        r'(?:candidates?|applicants?|students?)\s+'
+        r'(?:must|should|shall|are\s+required\s+to|is\s+required\s+to|have\s+to|has\s+to)\s+',
     ]
 
     seen = set()
 
     for pattern in eligibility_patterns:
         for match in re.finditer(pattern, text, re.IGNORECASE):
-            req = match.group(1).strip()
+            sentence = _sentence_around(text, match.start(), match.end())
+            req = _clean_fragment(sentence)
 
-            # Filter out very short or very long matches
-            if len(req) < 5 or len(req) > 200:
+            # A requirement has to be a statement, not a heading and not a
+            # two-word fragment such as "KYC-compliant".
+            if len(req) < 20 or len(req) > 300:
+                continue
+            if _is_page_marker(req) or _is_heading(req):
+                continue
+            if not ACTION_WORD_RE.search(req):
                 continue
 
             if req not in seen:
                 seen.add(req)
-                source_text = extract_surrounding_text(text, match.start(), match.end(), 60)
                 requirements.append(ExtractedRequirement(
                     requirement=req,
                     category=None,
-                    original_text=source_text
+                    original_text=req
                 ))
 
     return requirements
@@ -557,29 +680,35 @@ def extract_application_procedure(text: str) -> List[ExtractedProcedure]:
     """Extract application procedure steps."""
     procedures = []
 
-    # Look for numbered steps or bullet points
+    # Numbered items using Arabic or Roman numerals, e.g. "1." or "IV.".
+    # Government notices use both, and a Roman numeral clause is a real step.
     step_patterns = [
-        r'(?:step|step\s+\d+)[:\s]*(\d+)[.:]?\s+([^.!?\n]+)',
-        r'^(\d+)[.)\s:]\s+([^.!?\n]+)',  # Numbered list
+        r'(?:step|step\s+\d+)[:\s]*(\d+)[.:]?\s+(.+)',
+        r'^\s*(\d{1,2}|[IVXLCDM]{1,6})[.)\s:]\s+(.+)',
     ]
 
     seen = set()
     step_num = 1
 
     for pattern in step_patterns:
-        for match in re.finditer(pattern, text, re.MULTILINE):
-            if match.lastindex == 2:
-                step_text = match.group(2).strip()
-            else:
-                step_text = match.group(1).strip()
+        for match in re.finditer(pattern, text, re.MULTILINE | re.IGNORECASE):
+            step_text = _clean_fragment(_first_sentence(match.group(2).strip()))
 
-            if len(step_text) > 5 and step_text not in seen:
+            # A section heading is not a step. "PROCEDURE FOR AVAILING THE
+            # SCHOLARSHIP" is a title and must not become a bullet.
+            if len(step_text) < 15 or len(step_text) > 300:
+                continue
+            if _is_page_marker(step_text) or _is_heading(step_text):
+                continue
+            if not ACTION_WORD_RE.search(step_text):
+                continue
+
+            if step_text not in seen:
                 seen.add(step_text)
-                source_text = extract_surrounding_text(text, match.start(), match.end(), 50)
                 procedures.append(ExtractedProcedure(
                     step_number=step_num,
                     description=step_text,
-                    original_text=source_text
+                    original_text=step_text
                 ))
                 step_num += 1
 
@@ -590,25 +719,33 @@ def extract_important_conditions(text: str) -> List[ExtractedCondition]:
     """Extract important conditions and exceptions."""
     conditions = []
 
-    # Patterns for conditions
+    # Patterns that introduce a condition. The matched span is expanded to the
+    # surrounding sentence so the condition is a complete statement.
     condition_patterns = [
-        r'(?:Note|Important|Note:|Important:)[:\s]*([^.!?\n]+[.!?])',
-        r'(?:However|But|Exception|Provided|Condition)[:\s]*([^.!?\n]+)',
-        r'(?:shall\s+not|must\s+not|cannot)\s+([^.!?\n]+)',
+        r'(?:Note|Important)\s*[:\-]\s*',
+        r'(?:However|But|Exception|Provided|Condition)\s*[:\-]?\s*',
+        r'(?:shall\s+not|must\s+not|cannot)\s+',
     ]
 
     seen = set()
 
     for pattern in condition_patterns:
         for match in re.finditer(pattern, text, re.IGNORECASE):
-            cond = match.group(1).strip()
-            if len(cond) > 5 and cond not in seen:
+            cond = _clean_fragment(_sentence_around(text, match.start(), match.end()))
+
+            if len(cond) < 20 or len(cond) > 300:
+                continue
+            if _is_page_marker(cond) or _is_heading(cond):
+                continue
+            if not ACTION_WORD_RE.search(cond):
+                continue
+
+            if cond not in seen:
                 seen.add(cond)
-                source_text = extract_surrounding_text(text, match.start(), match.end(), 60)
                 conditions.append(ExtractedCondition(
                     condition=cond,
                     type='note',
-                    original_text=source_text
+                    original_text=cond
                 ))
 
     return conditions

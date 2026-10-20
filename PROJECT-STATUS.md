@@ -1,8 +1,8 @@
 # Project Status: Cognitive Accessibility Simplifier
 
 **Last Updated**: October 20, 2026  
-**Current Milestone**: Milestone 14 (Rate-Limit Reliability for long documents) - Complete  
-**Overall Completion**: ~100% (Milestones 1-14 complete, 383 backend tests + 56 extension tests passing)
+**Current Milestone**: Milestone 16 (Instant Summary quality and Markdown rendering) - Complete  
+**Overall Completion**: ~100% (Milestones 1-16 complete, 430 backend tests + 94 extension tests passing)
 
 ---
 
@@ -23,14 +23,16 @@
 - ✅ **Milestone 12 (Final Testing, Security, Performance & Documentation)**: Complete - Full test suite (338 tests), security hardening, API verification, documentation finalized
 - ✅ **Milestone 13 (Saral — Browser Copilot Chrome Extension)**: Complete - Manifest V3 extension built, 50 unit tests + 31 live backend checks passing, UI verified by headless-browser screenshots
 - ✅ **Milestone 14 (Rate-Limit Reliability for long documents)**: Complete - Bounded provider-aware retries with backoff and jitter, Gemini 503 classified as transient, round-based provider fallback, 37 new backend tests passing
+- ✅ **Milestone 15 (Fidelity Validation - No Invented Facts)**: Complete - Page artifacts stripped before the model sees the text, prompt hardened, four new fidelity checks, 31 new backend tests passing
+- ✅ **Milestone 16 (Instant Summary Quality and Markdown Rendering)**: Complete - Extraction returns complete statements, headings and page markers excluded, safe Markdown renderer, 14 new backend tests and 38 new extension tests passing
 
 ### Architecture Diagram
 - System architecture diagram created: `docs/system-architecture.svg` and `docs/system-architecture.png`
 - Shows 5-layer architecture: Client (React 19), API Gateway (FastAPI), Service Layer (NLP/AI modules), Data Layer (PostgreSQL + File Storage), External APIs (Hugging Face, Microsoft Edge TTS, Tesseract)
 
 ### Key Metrics
-- **Backend Tests**: 383 passing (+1 skipped), 0 failing
-- **Extension Unit Tests**: 56 passing (node:test)
+- **Backend Tests**: 430 passing (+1 skipped), 0 failing
+- **Extension Unit Tests**: 94 passing (node:test)
 - **Extension Live Backend Checks**: 31 passing, 0 failing
 - **Test Coverage**: ~70% across all modules
 - **API Endpoints**: 16 (8 live-tested with HTTP requests in M12; 8 more exercised by the extension verification)
@@ -38,6 +40,193 @@
 - **Security**: SSRF protection hardened to block RFC 1918 private IPs and link-local addresses (including AWS metadata 169.254.169.254)
 - **M13 Verification**: extension CORS origin allow-list tested (8 tests); web origins still restricted to `CORS_ORIGINS`
 - **M14 Verification**: rate-limit handling tested with 37 mocked-provider tests plus a live run that hit a real Groq 429 and recovered
+- **M15 Verification**: fidelity checks tested with 31 mocked-model tests plus two live runs of the reported scholarship notice
+- **M16 Verification**: extraction quality tested with 14 backend tests; Instant Summary and Markdown tested with 38 extension tests plus a live run of the reported scholarship notice and a headless rendering of the popup
+
+---
+
+## Milestone 16 — Instant Summary Quality and Markdown Rendering
+
+**Status**: ✅ COMPLETE  
+**Date Completed**: October 20, 2026
+
+**Root Causes (confirmed from the code and by reproducing the bug)**
+
+The reported bullets were reproduced exactly by running the backend extraction
+on the scholarship procedure text:
+
+```
+Documents needed:Documents needed: required documents to their institutions to enable,
+                  match of name of student, bank account number
+Step 1:Step 1: PROCEDURE FOR AVAILING THE SCHOLARSHIP
+Eligibility:Eligibility: of its students on the basis of
+```
+
+Three separate causes:
+
+1. **The backend's regex extraction returned fragments.**
+   `extract_eligibility_requirements` and `extract_important_conditions`
+   captured `[^.!?\n]+`, which stops at the end of a line, so a rule came back
+   as "KYC-compliant" or ", as per requirement of scheme". The same happened
+   for document names, which came back as sentence fragments.
+2. **Section headings were extracted as procedure steps.** The numbered-list
+   pattern matched `3. PROCEDURE FOR AVAILING THE SCHOLARSHIP` and turned the
+   heading into "Step 1". Roman-numeral clauses (`I.` to `IX.`), which are how
+   the notice actually lists its nine steps, were not matched at all.
+3. **The extension rendered the label twice.** `FactList` contained a
+   screen-reader-only `{fact.label}: ` prefix *and* a visible `{fact.label}:`,
+   so the label appeared twice in the text of every bullet. The escape
+   artefacts (`\*\*`, `\-`, `&#x20;`) are literal characters in the model
+   output, and React renders text children verbatim, so they were displayed as
+   written.
+
+**What Changed**
+
+| File | Change |
+| --- | --- |
+| `backend/app/services/extraction_service.py` | Eligibility requirements and conditions are expanded to the enclosing sentence; procedure steps support Roman numerals and reject headings; document names must be short noun phrases; page markers and headings are never facts. |
+| `backend/app/services/llm_service.py` | An empty completion is now a retryable failure instead of a silently empty result. |
+| `extension/src/shared/facts.ts` | Page markers, fragments and headings are rejected; a statement is never shown twice; document names are capped; the summary is capped at ten bullets and reports how many were left out. |
+| `extension/src/popup/components/FactList.tsx` | The duplicated screen-reader label is gone; an empty extraction shows a clean fallback message. |
+| `extension/src/popup/markdown.ts` | **New.** A safe Markdown subset: unescapes `\*\*` / `\-` / `&#x20;`, decodes entities, and parses paragraphs, headings, lists, code and emphasis. |
+| `extension/src/popup/components/Markdown.tsx` | **New.** Renders the parsed tree as React elements - the model output is never injected as HTML. |
+| `extension/src/popup/components/SummaryCard.tsx` | The simplified and translated text are rendered with the Markdown renderer. |
+| `backend/tests/test_extraction_quality.py` | **New.** 14 regression tests on the reported notice. |
+| `extension/src/__tests__/markdown.test.ts` | **New.** 23 tests: escape artefacts, plain text, line breaks, HTML safety. |
+| `extension/src/__tests__/factsSummary.test.ts` | **New.** 15 tests: duplicated labels, fragments, headings, page markers, the scholarship notice. |
+
+**Live Verification (real backend, real extension code)**
+
+```
+Documents needed: bank account number, correct bank details, Aadhaar
+Step 1: Students are required to apply annually through the National e-Scholarship Portal.
+Step 2: Incomplete applications will be rejected.
+Step 3: The students shall submit the required documents to their institutions ...
+Step 4: The bank account of the student must be KYC-compliant.
+Step 5: The applicant must provide correct bank details.
+Step 6: The institution shall verify the information submitted by the student ...
+Step 7: The institution shall retain the documents for verification ...
+Step 8: The University Grants Commission may ask for the documents ...
+Step 9: The student shall upload scanned copies of the certificates ...
+```
+
+No duplicated label, no page marker, no heading and no sentence fragment. The
+popup was rendered in headless Chrome and the card shows the facts with their
+icons, the Markdown heading and the bold text rendered as Markdown, and the
+existing design untouched.
+
+**Test Results**
+
+- Backend: **430 passing, 1 skipped, 0 failing** (was 414; +14 extraction quality, +2 empty completion)
+- Extension: **94 passing** (was 56; +23 Markdown, +15 Instant Summary)
+- Website build: succeeds; lint unchanged at 6 pre-existing warnings
+
+**Known Limitations (Honest)**
+
+- The extraction is still pattern based. A requirement written in a way none of
+  the patterns recognise is not reported - the summary shows fewer facts, not
+  wrong ones.
+- The Instant Summary shows at most ten bullets. The rest are counted in a
+  line below the card and remain in the simplified text.
+- A statement that is repeated with slightly different wording is only removed
+  when one of the two is contained in the other. A genuine paraphrase of the
+  same rule can still appear twice.
+- The Markdown renderer supports a deliberate subset. Tables, images, footnotes
+  and nested lists are shown as plain text rather than rendered.
+- The report was reproduced with a reconstruction of the scholarship notice
+  from the nine clauses described in the report, because the original file was
+  not attached to the request.
+
+---
+
+## Milestone 15 — Fidelity Validation: No Invented Facts
+
+**Status**: ✅ COMPLETE  
+**Date Completed**: October 20, 2026
+
+**Root Cause (confirmed from the code and a live run)**
+
+Three separate gaps let the simplified output say things the source never said:
+
+1. **Pagination artifacts reached the model.** `ocr_utils.combine_ocr_results`
+   joins the extracted pages with `--- Page N (text) ---`, and a government
+   PDF usually also prints its own `Page 4 of 7` footer. The prompt never
+   mentioned page markers, so the model read one as content and turned it into
+   an instruction.
+2. **The prompt did not protect qualifiers or entity types.** The rules said
+   "never invent new information", but nothing told the model to keep
+   "normally", to keep "subject to", or to keep "university/college/institute"
+   as written.
+3. **Validation was one-directional.** `validate_fact_preservation` only
+   checked that dates, amounts, percentages, ages and quantities from the
+   source were still present. It could not see anything the simplified text
+   *added*. A confident, readable, wrong sentence passed with
+   `validation_passed: true`.
+
+**What Changed**
+
+| File | Change |
+| --- | --- |
+| `backend/app/services/text_fidelity.py` | **New.** Artifact stripping plus four fidelity checks: page references, certainty and conditions, entity substitution, unsupported numbers in obligations. |
+| `backend/app/services/llm_service.py` | Page/OCR artifacts are stripped before the text reaches the model; the system prompt and both user prompts gained explicit rules for artifacts, qualifiers, conditions, entity types and not inventing steps. |
+| `backend/app/services/validation_service.py` | `validate_final_response` now runs the fidelity checks and reports them in `validation_failures`. |
+| `frontend/src/components/TrySaralNow.tsx` | The result card now shows a "Needs review" notice listing what was flagged. The website previously never displayed the validation result at all. |
+| `extension/src/popup/components/SummaryCard.tsx` | The warning now lists the specific reasons instead of the generic "every fact was preserved" wording. |
+| `backend/tests/test_text_fidelity.py` | **New.** 31 regression tests built on the reported scholarship text and the exact incorrect output. |
+
+**Behaviour After the Fix**
+
+- Standalone pagination lines and OCR artifacts never reach the model, so a
+  page marker cannot become an instruction in the first place.
+- If a page reference does appear in the output, it is reported - including
+  the case where the source only mentioned it as a footer.
+- A dropped hedge ("normally") or a dropped condition ("subject to") is
+  reported, with the definiteness marker that replaced it.
+- A swapped organisation type ("university" → "school") is reported.
+- An obligation that quotes a number the source never states is reported.
+- A faithful simplification raises no issue, so the checks do not fire on
+  correct output.
+
+The API contract is unchanged: the findings are added to the existing
+`validation_failures` list and flip the existing `validation_passed` flag.
+
+**Live Verification (real model, the reported scholarship notice, 2 runs)**
+
+```
+validation_passed = True
+  ok: page marker leaked into the output
+  ok: certainty upgraded (no hedge left)
+  ok: entity swapped to 'school'
+```
+
+Both runs kept "university/college/institute" and "normally", and neither
+mentioned "Page 4 of 7".
+
+**Test Results**
+
+- Backend: **414 passing, 1 skipped, 0 failing** (was 383; +31 fidelity tests, no regressions)
+- Extension: **56 passing** (unchanged)
+- Website build: succeeds; lint unchanged at 6 pre-existing warnings
+
+**Known Limitations (Honest)**
+
+- These checks detect specific, recognisable failure patterns. They cannot
+  prove that a reworded sentence means exactly what the original meant, and
+  they do not catch every way a simplification can drift. The original
+  document remains the authority.
+- The artifact stripping removes *standalone* pagination lines. A page
+  reference written inside a sentence is left alone, because it may be a real
+  cross-reference; the prompt and the validation rules cover that case.
+- The entity check only knows the organisation families listed in
+  `text_fidelity.ENTITY_FAMILIES`. A swap between two terms that are not in
+  the same family is not detected.
+- The condition check fires only when the simplified text contains no
+  conditional construction at all. A condition that is paraphrased into an
+  unconditional statement but happens to keep the word "if" elsewhere in the
+  document is not reported.
+- One of the two live runs produced an output that was very close to the
+  original. The separate "too similar to original" quality check reports
+  that, but it is a pre-existing limitation of the quality heuristics.
 
 ---
 
@@ -632,14 +821,16 @@ Extracted:
 - **Sep 24, 2026**: Test suite verified — all 338 tests passing; documentation finalized
 - **Oct 20, 2026**: Milestone 13 — Saral Browser Copilot Chrome extension implemented, built and verified (346 backend tests, 50 extension unit tests, 31 live backend checks)
 - **Oct 20, 2026**: Milestone 14 — Rate-limit reliability for long documents: bounded provider-aware retries, backoff with jitter, transient 5xx handling, round-based provider fallback (383 backend tests, 56 extension unit tests)
+- **Oct 20, 2026**: Milestone 15 — Fidelity validation: page artifacts stripped before the model sees the text, hardened prompts, four new fidelity checks, validation failures now shown in both UIs (414 backend tests, 56 extension unit tests)
+- **Oct 20, 2026**: Milestone 16 — Instant Summary quality and Markdown rendering: complete statements from the extraction, headings and page markers excluded, duplicated label removed, safe Markdown renderer (430 backend tests, 94 extension unit tests)
 - **Target**: Project is complete and ready for demonstration
 
 ---
 
 ## Test Execution (as of 2026-10-20)
 ```
-Total Backend Tests: 383
-Passing: 383 ✅
+Total Backend Tests: 430
+Passing: 430 ✅
 Failing: 0 ❌
 Skipped: 1 (a local origin that is not on the configured CORS allow-list)
 Errors: 0
@@ -658,6 +849,8 @@ Test Files:
 - tests/test_history.py (46 tests) - 46/46 passing
 - tests/test_cors.py (8 tests) - 7/8 passing, 1 skipped  [NEW in M13]
 - tests/test_llm_retry.py (37 tests) - 37/37 passing  [NEW in M14]
+- tests/test_text_fidelity.py (31 tests) - 31/31 passing  [NEW in M15]
+- tests/test_extraction_quality.py (14 tests) - 14/14 passing  [NEW in M16]
 
 Extension Tests:
 - extension/src/__tests__/config.test.ts (13 tests) - passing
@@ -666,6 +859,8 @@ Extension Tests:
 - extension/src/__tests__/errors.test.ts (10 tests) - passing
 - extension/src/__tests__/api.test.ts (8 tests) - passing
 - extension/src/__tests__/guards.test.ts (4 tests) - passing  [NEW in M14]
+- extension/src/__tests__/markdown.test.ts (23 tests) - passing  [NEW in M16]
+- extension/src/__tests__/factsSummary.test.ts (15 tests) - passing  [NEW in M16]
 - extension/scripts/verify-backend.mjs (31 live checks) - passing
 ```
 
@@ -693,15 +888,15 @@ python -m pytest tests/ -v
 
 ```bash
 cd extension
-npm test                # 56 unit tests
+npm test                # 94 unit tests
 npm run typecheck       # strict TypeScript check
 npm run lint            # oxlint
 npm run verify:backend  # 31 live checks (backend must be running)
 ```
 
 ### Failing Tests Summary
-- Backend: none - 383 tests passing, 0 failures, 0 errors, 1 skipped
-- Extension: none - 56 unit tests passing, 31 live backend checks passing
+- Backend: none - 430 tests passing, 0 failures, 0 errors, 1 skipped
+- Extension: none - 94 unit tests passing, 31 live backend checks passing
 
 ---
 
@@ -792,9 +987,11 @@ Key variables:
 - ✅ M12: Final Testing, Security, Performance & Documentation (338 tests, SSRF hardening, Postman, docs, architecture diagram)
 - ✅ M13: Saral — Browser Copilot Chrome extension (Manifest V3, 50 unit tests, 31 live backend checks)
 - ✅ M14: Rate-limit reliability for long documents (bounded provider-aware retries, backoff with jitter, transient 5xx handling, 37 new backend tests)
+- ✅ M15: Fidelity validation - no invented facts (page artifacts stripped before the model sees the text, hardened prompts, four fidelity checks, 31 new backend tests)
+- ✅ M16: Instant Summary quality and Markdown rendering (complete statements from the extraction, headings and page markers excluded, safe Markdown renderer, 14 new backend tests and 38 new extension tests)
 
 ### Test Coverage
-- **383/383 backend tests passing** (100%, 1 skipped)
+- **430/430 backend tests passing** (100%, 1 skipped)
 - **50/50 extension unit tests passing**
 - **31/31 extension live backend checks passing**
 - **Zero regressions** from M1-M12

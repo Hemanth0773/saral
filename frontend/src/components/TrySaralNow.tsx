@@ -340,6 +340,23 @@ export default function TrySaralNow({ sampleUrl, samplePulse, onSimplificationCo
               <p className="text-sm font-medium text-neutral-800 leading-relaxed">
                 Simplified to Grade {simplificationResult.target_grade_level} · {simplificationResult.model_used} · {simplificationResult.processing_time_ms}ms
               </p>
+              {!simplificationResult.validation_passed && simplificationResult.validation_failures.length > 0 && (
+                <div className="mt-3 rounded-xl bg-white stroke-border-thin p-3" role="status">
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-neutral-800">
+                    Needs review
+                  </p>
+                  <ul className="mt-1 list-disc pl-4 text-xs font-medium leading-relaxed text-neutral-700">
+                    {simplificationResult.validation_failures.slice(0, 3).map((failure, index) => (
+                      <li key={index}>{failure}</li>
+                    ))}
+                  </ul>
+                  {simplificationResult.validation_failures.length > 3 && (
+                    <p className="mt-1 text-xs font-medium text-neutral-600">
+                      +{simplificationResult.validation_failures.length - 3} more issue(s). Please check this against the original document.
+                    </p>
+                  )}
+                </div>
+              )}
               {simplificationResult.simplified_text && (
                 <details className="mt-3">
                   <summary className="cursor-pointer text-xs font-extrabold uppercase tracking-wider">View simplified text</summary>

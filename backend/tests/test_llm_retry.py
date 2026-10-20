@@ -669,6 +669,43 @@ class TestNoDuplicateProcessing:
         assert body["simplified_text"].count("Simplified chunk") == chunk_count
 
 
+class TestEmptyCompletion:
+    """An empty completion is a failure, not an empty successful result."""
+
+    def test_an_empty_groq_completion_raises(self):
+        response = MagicMock()
+        response.status_code = 200
+        response.text = ""
+        response.json.return_value = {
+            "choices": [{"message": {"content": "   "}, "finish_reason": "length"}]
+        }
+
+        with patch.object(llm_service.settings, "GROQ_API_KEY", "test-key"):
+            provider = llm_service.GroqProvider()
+            with patch("httpx.Client.post", return_value=response):
+                with pytest.raises(llm_service.LLMServiceError) as exc_info:
+                    provider.simplify_text("Test text", 5)
+
+        assert "empty" in str(exc_info.value).lower()
+
+    def test_an_empty_completion_is_retried(self, no_sleep, deterministic_backoff):
+        """The retry policy treats an empty completion like any other failure."""
+        provider = FakeProvider(
+            "Groq",
+            [llm_service.LLMServiceError("Groq returned an empty completion."), "Recovered text"],
+        )
+
+        with patch.object(llm_service, "get_llm_provider", return_value=provider):
+            with use_chain(provider):
+                result = llm_service.generate_simplification_response(
+                    "Some text", 5, "doc_empty"
+                )
+
+        assert result["success"] is True
+        assert result["simplified_text"] == "Recovered text"
+        assert len(provider.calls) == 2
+
+
 # ============================================================
 # Provider chain construction
 # ============================================================

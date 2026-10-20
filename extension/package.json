@@ -13,6 +13,7 @@
     "build": "npm run typecheck && npm run build:popup && npm run build:scripts",
     "test": "node --import ./scripts/register-ts.mjs --test \"src/__tests__/*.test.ts\"",
     "verify:backend": "node --import ./scripts/register-ts.mjs scripts/verify-backend.mjs",
+    "verify:scholarship": "node --import ./scripts/register-ts.mjs scripts/verify-scholarship.mjs",
     "verify:dist": "node scripts/verify-dist.mjs"
   },
   "dependencies": {

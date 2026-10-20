@@ -165,10 +165,11 @@ The contracts are mirrored in `src/types/api.ts` and are covered by
 ```bash
 npm run typecheck        # tsc --noEmit (strict)
 npm run lint             # oxlint
-npm test                 # node:test unit tests (56 tests)
+npm test                 # node:test unit tests (94 tests)
 npm run build            # typecheck + popup build + service worker/content script builds
 npm run verify:dist      # checks that every manifest path exists inside dist/
 npm run verify:backend   # live end-to-end check against a running backend
+npm run verify:scholarship # live check of the Instant Summary against a real backend
 ```
 
 `npm run verify:backend` needs the backend running and prints a PASS/FAIL line
@@ -185,6 +186,38 @@ per backend capability:
 ```
 
 ---
+
+## Instant Summary
+
+The "Instant Summary" card is built from the backend's structured extraction
+(`/api/documents/extract-info`) and the fact-preservation list of the
+simplification response. It is deliberately conservative:
+
+* A fact is only shown when it is a complete statement or a short label.
+* Section headings (for example `PROCEDURE FOR AVAILING THE SCHOLARSHIP`) are
+  not facts and are never shown as a bullet.
+* Pagination markers such as `Page 5 of 7` are never facts.
+* The same statement is only shown once, even when the backend reports it both
+  as a procedure step and as an eligibility rule.
+* A document name is a short noun phrase; a sentence that merely mentions a
+  document is not shown as one.
+* When nothing can be extracted with confidence the card says so instead of
+  showing malformed bullets.
+
+The card lists at most ten bullets and says how many further facts were found.
+
+## Markdown in the simplified text
+
+The simplified text can contain Markdown (`**bold**`, `- a list`,
+`### a heading`) and, when a model escapes its own output, artefacts such as
+`**` or `&#x20;`.
+
+The popup parses the text into a node tree and renders it as React elements
+(`src/popup/markdown.ts`, `src/popup/components/Markdown.tsx`). The model
+output is **never** injected as HTML, so nothing it contains can turn into
+markup. The parser handles paragraphs, headings, ordered and unordered lists,
+fenced code, bold, italic and inline code, and it removes the encoding
+artefacts before parsing.
 
 ## Known limitations
 
@@ -203,6 +236,12 @@ per backend capability:
 * **The reading-grade badge only appears when the backend measured the text.**
   When readability analysis is unavailable the card shows
   "Grade not measured" rather than a made-up grade.
+* **Validation is a safety net, not a guarantee.** Saral reports the specific
+  problems it can detect - a page marker turned into an instruction, a dropped
+  qualifier such as "normally", a swapped organisation type such as
+  "university" becoming "school" - but it cannot prove that a reworded
+  sentence means exactly what the original meant. The original document
+  remains the authority.
 * **Scanned PDFs** need Tesseract OCR installed on the machine running the
   backend; the extension reports the backend's own error.
 * `Alt+S` opens the popup through `chrome.action.openPopup()`, which needs
