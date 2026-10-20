@@ -148,6 +148,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Chrome extension origins ("chrome-extension://<id>") are matched by
+    # pattern because the id is assigned by Chrome and is not known in
+    # advance. A web page can never send this origin, so no additional web
+    # origin is exposed.
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
 )
 
 

@@ -11,6 +11,7 @@ A modular architecture with a React frontend and FastAPI backend:
 
 - **Frontend**: React 19 single-page application with responsive UI for document processing
 - **Backend**: FastAPI backend handling document processing, NLP, LLM simplification, translation, and TTS
+- **Chrome extension**: "Saral — Browser Copilot", a Manifest V3 extension that reads the current government page (or a selection), simplifies it, translates it to Kannada and plays it as audio — using the same backend
 - **Document upload processing** (PDF, images, text files)
 - **Webpage content extraction** from government URLs (SSRF-protected)
 - **OCR for scanned documents** (Tesseract)
@@ -109,6 +110,7 @@ Output (simplified, accessible content)
 - **M10 - Text-to-Speech**: edge-tts (Microsoft Edge TTS), English and Kannada voices
 - **M11 - Database / History**: PostgreSQL, SQLAlchemy, paginated history API
 - **M12 - Final Testing, Security, Performance & Documentation**: Complete
+- **M13 - Browser Copilot Extension**: Manifest V3 Chrome extension (page/selection extraction, simplification, translation, TTS, audio playback)
 
 ## Technology Stack
 
@@ -124,7 +126,7 @@ Output (simplified, accessible content)
 - **Web Scraping**: BeautifulSoup4 4.12.2
 - **NLP**: spaCy 3.8.16
 - **Translation**: Transformers 4.49.0, torch 2.5.0, sentencepiece 0.2.0 (NLLB-200 model)
-- **TTS**: edge-tts 7.2.8
+- **TTS**: edge-tts 7.3.1
 - **Database**: SQLAlchemy 2.0.36, psycopg[binary] 3.2.13 (PostgreSQL)
 - **Testing**: pytest 8.3.3, pytest-asyncio 0.24.0, pytest-cov
 
@@ -134,6 +136,12 @@ Output (simplified, accessible content)
 - **Language**: TypeScript 6.0.2
 - **Styling**: Tailwind CSS 3.4.19, PostCSS 8.5.28, Autoprefixer 10.6.1
 - **Linting**: Oxlint 1.81.0
+
+### Chrome Extension (Manifest V3)
+- **Framework**: React 19.2.8, TypeScript 6.0.2, Vite 8.3.0, Tailwind CSS 3.4.19
+- **Runtime**: Chrome 116+ (Chrome 127+ for the Alt+S shortcut)
+- **No extra UI framework**: the popup reuses the same Tailwind design tokens as the website
+- **Testing**: Node's built-in `node:test` runner (no extra test dependency)
 
 ## Project Structure
 ```
@@ -204,6 +212,24 @@ MiniProject_CSE7102/
 │   ├── .env.example
 │   ├── .gitignore
 │   └── requirements.txt
+├── extension/
+│   ├── manifest.json
+│   ├── popup.html
+│   ├── vite.config.ts
+│   ├── vite.scripts.config.ts
+│   ├── public/help.html
+│   ├── icons/
+│   ├── scripts/
+│   ├── src/
+│   │   ├── background/
+│   │   ├── content/
+│   │   ├── popup/
+│   │   ├── services/
+│   │   ├── shared/
+│   │   ├── styles/
+│   │   ├── types/
+│   │   └── __tests__/
+│   └── README.md
 ├── docs/
 │   ├── system-architecture.svg
 │   └── system-architecture.png
@@ -304,6 +330,81 @@ cd frontend
 npm run lint
 ```
 
+## Chrome Extension — Saral: Browser Copilot
+
+A Manifest V3 extension that lets a citizen read a difficult government notice
+without leaving the page. It contains no AI, translation, TTS or document
+processing of its own: every capability comes from the same FastAPI backend
+the website uses.
+
+Full documentation: [`extension/README.md`](extension/README.md).
+
+### Architecture
+```
+┌──────────────────────────────┐
+│  Popup (React 19 + TS)       │  preview text, actions, result card
+└──────────────┬───────────────┘
+               │ chrome.runtime.sendMessage
+┌──────────────▼───────────────┐
+│  Background service worker   │  owns the backend URL, performs every
+│  (MV3)                       │  HTTP call, injects the content script
+└──────────────┬───────────────┘
+               │ fetch
+┌──────────────▼───────────────┐
+│  FastAPI backend (existing)  │
+└──────────────────────────────┘
+
+┌──────────────────────────────┐
+│  Content script (on demand)  │  extracts the main content or the user's
+│  injected on "Read Active Tab"│  selection from the current page
+└──────────────────────────────┘
+```
+
+### Extension Setup
+```bash
+cd extension
+npm install
+npm run build          # -> extension/dist (self-contained, loadable)
+```
+
+Load it in Chrome: `chrome://extensions` → enable **Developer mode** →
+**Load unpacked** → select the `extension/dist` folder.
+
+For UI work, `npm run dev` starts Vite with hot reload; the built output in
+`dist/` is what Chrome loads.
+
+### Extension Permissions
+| Permission | Why |
+| --- | --- |
+| `activeTab` | Read the current page, only after the user clicks **Read Active Tab** |
+| `scripting` | Inject the text extractor into that page on demand |
+| `storage` | Remember the backend address and nothing else |
+| `host_permissions` | `http://127.0.0.1:8000/*` and `http://localhost:8000/*` |
+| `optional_host_permissions` | Requested at runtime only for a custom backend host, after Chrome's own prompt |
+
+### Configuration
+The default backend address is `http://127.0.0.1:8000`. It can be changed at
+runtime from the popup (profile button → backend address) and is stored in
+`chrome.storage.local`. No API key or database credential is ever sent to the
+extension.
+
+### Extension Endpoints Used
+`POST /api/documents/simplify`, `POST /api/documents/extract`,
+`POST /api/documents/url`, `POST /api/documents/extract-info`,
+`POST /api/documents/readability`, `POST /api/translate`, `POST /api/tts` and
+`GET /api/media/audio/{filename}`.
+
+### Extension Known Limitations
+- **Hindi is not available**: the backend translation model validates the
+  language code against `['en', 'kn']`, so the Hindi option is shown disabled
+  and marked *Unavailable* rather than silently returning English.
+- Chrome settings, the Chrome Web Store, the built-in PDF viewer and other
+  `chrome://` pages block extensions; the popup explains this instead of
+  failing silently.
+- The reading-grade badge only appears when the backend actually measured the
+  text; otherwise the card says "Grade not measured".
+- The `Alt+S` shortcut uses `chrome.action.openPopup()` and needs Chrome 127+.
+
 ## Supported Input Formats
 - **Documents**: PDF (.pdf), Text (.txt), Word (.docx, .doc)
 - **Images**: JPEG (.jpg, .jpeg), PNG (.png)
@@ -319,16 +420,29 @@ npm run lint
 - **Path Traversal Prevention**: Filename sanitization strips `../`, `..\\`, and dangerous characters
 - **Error Response Masking**: Database credentials and internal connection strings are never exposed in error responses
 - **Secrets Management**: API keys loaded from `.env` file (gitignored); never hardcoded in source
+- **Extension CORS**: web origins still have to be listed in `CORS_ORIGINS`. Chrome extension origins (`chrome-extension://<id>`) are matched by `CORS_ORIGIN_REGEX`, because a web page can never send that origin — no additional web origin is exposed
 
 ## Testing
 ```bash
 cd backend
 python -m pytest tests/ -v
 ```
-- **Total Tests**: 338
-- **Passing**: 338
+- **Total Tests**: 346 (+1 skipped when a local origin is not on the configured allow-list)
+- **Passing**: 346
 - **Failing**: 0
 - **Test Coverage**: ~70% across all modules
+
+**Extension Tests:**
+```bash
+cd extension
+npm test                # 50 unit tests (node:test)
+npm run verify:backend  # 31 live checks against a running backend
+```
+- `src/__tests__/config.test.ts` — backend URL validation, limits, language support (13)
+- `src/__tests__/extractor.test.ts` — text cleaning, truncation, selection priority (11)
+- `src/__tests__/facts.test.ts` — important-fact derivation from backend responses (10)
+- `src/__tests__/errors.test.ts` — HTTP status to user-message mapping (8)
+- `src/__tests__/api.test.ts` — request building and error handling against a stubbed `fetch` (8)
 
 **Live API Testing (M12 Verification):**
 8 of 16 endpoints verified with live HTTP requests:
@@ -365,6 +479,13 @@ python -m pytest tests/ --cov=app --cov-report=term-missing
 2. Install dependencies: `npm install`
 3. Configure API URL if needed (edit `src/services/api.ts`)
 
+### Chrome Extension
+1. Navigate to the extension directory: `cd extension`
+2. Install dependencies: `npm install`
+3. Build: `npm run build`
+4. Load `extension/dist` through `chrome://extensions` → Developer mode → Load unpacked
+5. Make sure the backend is running on `http://127.0.0.1:8000` (or set a different address from the popup's settings)
+
 ## Environment Configuration
 Key environment variables (set in `.env`):
 - `APP_NAME`: Application name
@@ -374,6 +495,7 @@ Key environment variables (set in `.env`):
 - `HOST` / `PORT`: Server host and port
 - `MAX_FILE_SIZE_MB`: Maximum upload file size (default: 10)
 - `CORS_ORIGINS`: Allowed CORS origins (JSON list)
+- `CORS_ORIGIN_REGEX`: Pattern for extra allowed origins (default: Chrome extension origins)
 - `LLM_PROVIDER`: Provider for simplification (gemini, openai, groq, openrouter, mock, auto)
 - `LLM_API_KEY`: API key for the chosen LLM provider (backward compatibility)
 - `LLM_MODEL`: Default LLM model (default: gpt-3.5-turbo)

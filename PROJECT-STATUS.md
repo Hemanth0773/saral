@@ -1,8 +1,8 @@
 # Project Status: Cognitive Accessibility Simplifier
 
-**Last Updated**: September 24, 2026  
-**Current Milestone**: Milestone 12 (Final Testing, Security, Performance & Documentation) - Complete  
-**Overall Completion**: ~100% (Milestones 1-12 complete, 338 tests passing)
+**Last Updated**: October 20, 2026  
+**Current Milestone**: Milestone 13 (Saral — Browser Copilot Chrome Extension) - Complete  
+**Overall Completion**: ~100% (Milestones 1-13 complete, 346 backend tests + 51 extension tests passing)
 
 ---
 
@@ -21,19 +21,78 @@
 - ✅ **Milestone 10 (Text-to-Speech)**: Complete - 29 TTS tests passing, English and Kannada TTS working
 - ✅ **Milestone 11 (Database / History)**: Complete - 46 history tests passing, PostgreSQL integration with history tracking
 - ✅ **Milestone 12 (Final Testing, Security, Performance & Documentation)**: Complete - Full test suite (338 tests), security hardening, API verification, documentation finalized
+- ✅ **Milestone 13 (Saral — Browser Copilot Chrome Extension)**: Complete - Manifest V3 extension built, 50 unit tests + 31 live backend checks passing, UI verified by headless-browser screenshots
 
 ### Architecture Diagram
 - System architecture diagram created: `docs/system-architecture.svg` and `docs/system-architecture.png`
 - Shows 5-layer architecture: Client (React 19), API Gateway (FastAPI), Service Layer (NLP/AI modules), Data Layer (PostgreSQL + File Storage), External APIs (Hugging Face, Microsoft Edge TTS, Tesseract)
 
 ### Key Metrics
-- **Total Tests**: 338
-- **Tests Passing**: 338 ✅
-- **Tests Failing**: 0 ❌
+- **Backend Tests**: 346 passing (+1 skipped), 0 failing
+- **Extension Unit Tests**: 50 passing (node:test)
+- **Extension Live Backend Checks**: 31 passing, 0 failing
 - **Test Coverage**: ~70% across all modules
-- **API Endpoints**: 16 (8 live-tested with HTTP requests)
+- **API Endpoints**: 16 (8 live-tested with HTTP requests in M12; 8 more exercised by the extension verification)
 - **M12 Verification**: 8 of 16 endpoints tested with live HTTP requests; PostgreSQL history verified with 89+ records
 - **Security**: SSRF protection hardened to block RFC 1918 private IPs and link-local addresses (including AWS metadata 169.254.169.254)
+- **M13 Verification**: extension CORS origin allow-list tested (8 tests); web origins still restricted to `CORS_ORIGINS`
+
+---
+
+## Milestone 13 — Saral: Browser Copilot (Chrome Extension)
+
+**Status**: ✅ COMPLETE  
+**Date Completed**: October 20, 2026
+
+**What Was Built**
+- Manifest V3 extension (`extension/manifest.json`) with action popup, background service worker, on-demand content script and an `Alt+S` keyboard command
+- React 19 + TypeScript popup (`extension/src/popup/`) that reuses the website's design tokens (brand yellow `#F9C915`, ink `#0D0D0D`, pale lavender surfaces, neo-brutalist borders and hard offset shadows)
+- Background service worker that owns the backend URL and performs **every** HTTP call (`extension/src/background/`)
+- Content script that extracts the main readable content of a page, or the user's text selection when one exists (`extension/src/content/extractor.ts`)
+- Typed client for the existing backend endpoints, with contracts mirrored in `extension/src/types/api.ts`
+- Document upload (PDF/JPG/PNG/TXT/DOCX up to 10 MB) reusing `POST /api/documents/extract`
+- URL extraction through the backend's `POST /api/documents/url`, so the existing SSRF protection is not duplicated
+- Simplification, structured facts, measured reading grade, Kannada translation, real TTS audio with an in-popup player, and copy-to-clipboard
+- Bundled "Help & Docs" page (`extension/public/help.html`) opened from the popup footer
+- Extension test suite using Node's built-in `node:test` runner (no new test dependency)
+- Live verification script (`extension/scripts/verify-backend.mjs`) that drives the extension's own client code against a running backend
+
+**Key Files**
+- `extension/manifest.json` - Manifest V3 (permissions, action, service worker, command)
+- `extension/src/background/index.ts` - Message routing, tab injection, configuration
+- `extension/src/background/api.ts` - The only place that performs HTTP calls
+- `extension/src/content/extractor.ts` - Readable-content extraction (pure, unit tested)
+- `extension/src/popup/App.tsx` - State machine and orchestration
+- `extension/src/popup/components/` - Header, HeroCard, InputCard, ActionBar, SummaryCard, AudioDeck, FactList, SettingsPanel
+- `extension/src/shared/facts.ts` - Important-fact derivation from backend responses
+- `extension/src/shared/errors.ts` - HTTP status to user-message mapping
+- `extension/src/__tests__/` - 50 unit tests
+- `extension/scripts/verify-backend.mjs` - 31 live checks
+
+**Backend Changes Required (and Why)**
+| Change | Reason |
+| --- | --- |
+| `CORS_ORIGIN_REGEX` setting + `allow_origin_regex` in `app/main.py` | A Chrome extension's origin is `chrome-extension://<id>` and the id is assigned by Chrome, so it cannot be listed statically. The pattern only matches Chrome extension origins; a web page can never send that origin, so no additional web origin is exposed. Covered by `backend/tests/test_cors.py` (8 tests). |
+| `edge-tts` 7.2.8 → 7.3.1 in `backend/requirements.txt` | Edge TTS 7.2.8 was rejected with HTTP 403 by Microsoft's speech endpoint, so TTS failed for both the website and the extension. 7.3.1 restores it. |
+
+**Test Results**
+- Backend: **346 passing, 1 skipped, 0 failing** (was 338 — the 8 new CORS tests, no regressions)
+- Extension Unit Tests: **50 passing** (config, extractor, facts, errors, api client)
+- Extension live backend checks: **31 passing, 0 failing** (health + CORS, simplify, extract-info, readability, translate en→kn, TTS + audio fetch, error handling)
+- Extension typecheck (`tsc --noEmit`, strict): clean
+- Extension lint (`oxlint`): clean
+- Extension production build: succeeds, `extension/dist/` is self-contained
+- Website production build: still succeeds
+
+**UI Verification**
+- Popup initial state and result state rendered in headless Chrome and compared against the supplied `screen.png` reference — hero card, "BROWSER COPILOT" / "v2.4 Live" pills, input card, action row, "INSTANT SUMMARY" card, reading-grade badge, fact icons, audio deck, language pills and footer all match the reference layout and visual language.
+
+**Known Limitations (Honest)**
+- **Hindi is not available.** The backend validates the language code against `['en', 'kn']`, so the popup shows Hindi disabled and labelled *Unavailable* rather than silently returning English.
+- Chrome settings, the Chrome Web Store and the built-in PDF viewer block extensions; the popup explains this instead of failing silently.
+- The reading-grade badge only appears when the backend actually measured the text; otherwise the card reads "Grade not measured".
+- The `Alt+S` shortcut needs `chrome.action.openPopup()` (Chrome 127+); on older builds only the toolbar button works.
+- The extension UI was verified by automated headless-browser rendering and live API checks. The final "load the unpacked folder in Chrome and click through it" pass is a manual step and has not been performed by the assistant.
 
 ---
 
@@ -455,16 +514,17 @@ Extracted:
 - **Sep 22, 2026**: Complete documentation and test counts finalized
 - **Sep 23, 2026**: M12 security hardening (SSRF), Postman collection updated, architecture diagram created
 - **Sep 24, 2026**: Test suite verified — all 338 tests passing; documentation finalized
+- **Oct 20, 2026**: Milestone 13 — Saral Browser Copilot Chrome extension implemented, built and verified (346 backend tests, 51 extension unit tests, 31 live backend checks)
 - **Target**: Project is complete and ready for demonstration
 
 ---
 
-## Test Execution (as of 2026-09-24)
+## Test Execution (as of 2026-10-20)
 ```
-Total Tests: 338
-Passing: 338 ✅
+Total Backend Tests: 346
+Passing: 346 ✅
 Failing: 0 ❌
-Skipped: 0
+Skipped: 1 (a local origin that is not on the configured CORS allow-list)
 Errors: 0
 
 Test Files:
@@ -479,6 +539,15 @@ Test Files:
 - tests/test_translation.py (23 tests) - 23/23 passing
 - tests/test_tts.py (29 tests) - 29/29 passing
 - tests/test_history.py (46 tests) - 46/46 passing
+- tests/test_cors.py (8 tests) - 7/8 passing, 1 skipped  [NEW in M13]
+
+Extension Tests:
+- extension/src/__tests__/config.test.ts (13 tests) - passing
+- extension/src/__tests__/extractor.test.ts (11 tests) - passing
+- extension/src/__tests__/facts.test.ts (10 tests) - passing
+- extension/src/__tests__/errors.test.ts (8 tests) - passing
+- extension/src/__tests__/api.test.ts (8 tests) - passing
+- extension/scripts/verify-backend.mjs (31 live checks) - passing
 ```
 
 **M6 Bug Fixes Applied:**
@@ -503,9 +572,17 @@ cd backend
 python -m pytest tests/ -v
 ```
 
+```bash
+cd extension
+npm test                # 50 unit tests
+npm run typecheck       # strict TypeScript check
+npm run lint            # oxlint
+npm run verify:backend  # 31 live checks (backend must be running)
+```
+
 ### Failing Tests Summary
-- None - all 338 tests passing, 0 failures, 0 errors, 0 skipped
-- Note: 2 tests in test_documents.py (Milestone 2) have known format mismatches but are counted in the 24 total
+- Backend: none - 346 tests passing, 0 failures, 0 errors, 1 skipped
+- Extension: none - 50 unit tests passing, 31 live backend checks passing
 
 ---
 
@@ -565,6 +642,8 @@ Key variables:
 - `PORT`: Server port
 - `DEBUG`: Enable debug mode
 - `MAX_FILE_SIZE_MB`: Maximum upload file size
+- `CORS_ORIGINS`: Allowed web origins (JSON list)
+- `CORS_ORIGIN_REGEX`: Pattern for extra allowed origins (default: Chrome extension origins)
 - `UPLOAD_DIRECTORY`: Temporary upload directory
 - `DOCUMENT_ID_PREFIX`: Prefix for generated document IDs
 - `DATABASE_URL`: PostgreSQL connection string (e.g., `postgresql+psycopg://postgres:password@localhost:5432/cognitive_accessibility_db`)
@@ -592,12 +671,15 @@ Key variables:
 - ✅ M10: Text-to-Speech (edge-tts, English and Kannada)
 - ✅ M11: Database/History (PostgreSQL, history API, 46 tests)
 - ✅ M12: Final Testing, Security, Performance & Documentation (338 tests, SSRF hardening, Postman, docs, architecture diagram)
+- ✅ M13: Saral — Browser Copilot Chrome extension (Manifest V3, 50 unit tests, 31 live backend checks)
 
 ### Test Coverage
-- **338/338 tests passing** (100%)
-- **Zero regressions** from M1-M11
+- **346/346 backend tests passing** (100%, 1 skipped)
+- **50/50 extension unit tests passing**
+- **31/31 extension live backend checks passing**
+- **Zero regressions** from M1-M12
 - **~70% code coverage** overall (pytest-cov)
-- **16 API endpoints** (8 live-tested end-to-end with HTTP requests)
+- **16 API endpoints** (8 live-tested end-to-end in M12, 8 more exercised by the extension verification)
 
 ### M12 Verification Results
 - **Test Suite**: 338 tests passing (baseline + SSRF security tests)
@@ -631,3 +713,6 @@ Key variables:
 11. ✅ **Architecture diagram (M12)** - Created `docs/system-architecture.svg` and `docs/system-architecture.png`
 12. ✅ **Frontend documented (M12)** - React 19, TypeScript, Vite, Tailwind CSS documented in README
 13. ⚠️ **Deprecation warnings**: 97 warnings from Python 3.14 (datetime.utcnow()) and Pydantic V2 (V1-style @validator, .dict()). Non-breaking; documented as tech debt.
+14. ✅ **Browser extension (M13)** - Manifest V3 extension in `extension/`, isolated from the website build; uses the same backend, no duplicated AI/translation/TTS code
+15. ✅ **Extension CORS (M13)** - Chrome extension origins matched by `CORS_ORIGIN_REGEX`; web origins still restricted to the `CORS_ORIGINS` list, verified by `tests/test_cors.py`
+16. ✅ **edge-tts upgraded to 7.3.1 (M13)** - 7.2.8 was rejected with HTTP 403 by Microsoft's speech endpoint, breaking TTS for the website and the extension

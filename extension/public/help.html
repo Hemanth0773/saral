@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Saral — Help &amp; Docs</title>
+    <style>
+      :root {
+        --yellow: #f9c915;
+        --ink: #0d0d0d;
+        --surface: #fbf8fc;
+        --lavender: #f4f2f9;
+        --lavender-high: #e7e4ef;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px 20px 64px;
+        background: var(--surface);
+        color: var(--ink);
+        font-family: 'Plus Jakarta Sans', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 760px; margin: 0 auto; }
+      header.brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+      .dot { width: 10px; height: 10px; border-radius: 9999px; background: var(--yellow); }
+      h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 4px; }
+      h2 {
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin: 0 0 10px;
+      }
+      p { font-size: 14px; margin: 0 0 12px; }
+      ul { font-size: 14px; margin: 0 0 12px; padding-left: 20px; }
+      li { margin-bottom: 6px; }
+      code, kbd {
+        font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+        font-size: 12.5px;
+        background: var(--lavender-high);
+        border: 1.5px solid var(--ink);
+        border-radius: 6px;
+        padding: 1px 5px;
+      }
+      section {
+        background: #fff;
+        border: 2px solid var(--ink);
+        border-radius: 14px;
+        box-shadow: 4px 4px 0 0 var(--ink);
+        padding: 20px;
+        margin-bottom: 18px;
+      }
+      .hero {
+        background: var(--yellow);
+        margin-bottom: 18px;
+      }
+      .hero p { font-weight: 500; }
+      .tag {
+        display: inline-block;
+        background: #fff;
+        border: 2px solid var(--ink);
+        border-radius: 9999px;
+        box-shadow: 2px 2px 0 0 var(--ink);
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 3px 10px;
+        margin-bottom: 12px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+      .tile {
+        background: var(--lavender);
+        border: 2px solid var(--ink);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .tile strong { display: block; font-size: 13px; margin-bottom: 4px; }
+      .tile span { font-size: 12.5px; color: #333; }
+      .note {
+        background: #fff7db;
+        border: 2px solid var(--ink);
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 13px;
+      }
+      footer { font-size: 12px; color: #555; text-align: center; margin-top: 8px; }
+      a { color: var(--ink); font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="brand">
+        <span class="dot" aria-hidden="true"></span>
+        <strong>Saral</strong>
+      </header>
+
+      <section class="hero">
+        <span class="tag">Browser Copilot · v2.4</span>
+        <h1>Make it simple.</h1>
+        <p>
+          Saral turns difficult government notices, circulars and official webpages into plain
+          language you can read, translate and listen to — without leaving the page you are on.
+        </p>
+      </section>
+
+      <section>
+        <h2>How to use it</h2>
+        <ol style="font-size: 14px; padding-left: 20px; margin: 0 0 12px">
+          <li>Open the government page or circular you want to understand.</li>
+          <li>Click the Saral icon in the Chrome toolbar.</li>
+          <li>
+            Press <strong>Read Active Tab</strong> to collect the main content — or highlight a
+            passage first and Saral will use your selection instead.
+          </li>
+          <li>Review the text in the box. Nothing is sent until you press <strong>Simplify</strong>.</li>
+          <li>Use <strong>Translate</strong> for Kannada and <strong>Read Aloud</strong> for audio.</li>
+        </ol>
+        <p>
+          <strong>Keyboard:</strong> press <kbd>Alt</kbd> + <kbd>S</kbd> on any page to open Saral.
+        </p>
+      </section>
+
+      <section>
+        <h2>What the popup can do</h2>
+        <div class="grid">
+          <div class="tile">
+            <strong>Read Active Tab</strong>
+            <span
+              >Extracts the readable content of the current page and shows it for review before
+              anything is sent.</span
+            >
+          </div>
+          <div class="tile">
+            <strong>Attach a document</strong>
+            <span>PDF, JPG, PNG, TXT and DOCX up to 10 MB, read by your own Saral backend.</span>
+          </div>
+          <div class="tile">
+            <strong>Paste a URL</strong>
+            <span
+              >Official portal URLs are fetched by the backend, which keeps its own SSRF
+              protection in place.</span
+            >
+          </div>
+          <div class="tile">
+            <strong>Simplify</strong>
+            <span
+              >Rewrites the text for a grade-5 reading level and checks that dates, amounts and
+              requirements are preserved.</span
+            >
+          </div>
+          <div class="tile">
+            <strong>Translate</strong>
+            <span
+              >English and Kannada are supported by the backend translation model today.</span
+            >
+          </div>
+          <div class="tile">
+            <strong>Read Aloud</strong>
+            <span>Generates a real audio file on the backend and plays it in the popup.</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Backend address</h2>
+        <p>
+          Saral sends every request to your own Saral FastAPI backend. The default is
+          <code>http://127.0.0.1:8000</code>. To point the extension at a deployed backend, open
+          the popup, click the profile button in the header and change the address.
+        </p>
+        <p>
+          When you choose a host other than <code>127.0.0.1</code> or <code>localhost</code>,
+          Chrome asks you to allow access to that host once. Saral never stores API keys — the
+          backend keeps them server side.
+        </p>
+        <p>
+          Start the backend with:
+          <br />
+          <code>cd backend &amp;&amp; python -m uvicorn app.main:app --host 127.0.0.1 --port 8000</code>
+        </p>
+      </section>
+
+      <section>
+        <h2>Permissions, and why they are needed</h2>
+        <ul>
+          <li>
+            <strong>activeTab</strong> — reads the page you are on, only after you click Read
+            Active Tab.
+          </li>
+          <li>
+            <strong>scripting</strong> — injects the small text extractor into that page on
+            demand.
+          </li>
+          <li>
+            <strong>storage</strong> — remembers the backend address you typed, nothing else.
+          </li>
+          <li>
+            <strong>Host access</strong> — limited to your backend host, and requested per host
+            only if you change the address.
+          </li>
+        </ul>
+        <div class="note">
+          <strong>Privacy:</strong> Saral never uploads a page automatically, never collects
+          browsing history or open tabs, and never writes into the page you are reading. Only the
+          text you approve is sent to your backend.
+        </div>
+      </section>
+
+      <section>
+        <h2>Current limitations</h2>
+        <ul>
+          <li>
+            <strong>Hindi is not available yet.</strong> The backend translation model supports
+            English and Kannada only, so the Hindi option in the popup is shown as unavailable
+            rather than silently returning English.
+          </li>
+          <li>
+            Pages that block extensions — Chrome settings, the Chrome Web Store, the built-in PDF
+            viewer and other restricted URLs — cannot be read.
+          </li>
+          <li>
+            The reading-grade badge only appears when the backend actually measured the text.
+          </li>
+          <li>Scanned PDFs need Tesseract OCR installed on the machine running the backend.</li>
+        </ul>
+      </section>
+
+      <footer>Saral — Cognitive Accessibility Simplifier for Government Documents.</footer>
+    </div>
+  </body>
+</html>

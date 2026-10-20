@@ -28,6 +28,11 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://127.0.0.1:8000",
     ]
+    # Extra origins matched by pattern. Used for the Saral browser extension,
+    # whose origin is "chrome-extension://<extension id>" and therefore cannot
+    # be listed statically. Only Chrome extension origins are accepted; regular
+    # web origins still have to be listed in CORS_ORIGINS.
+    CORS_ORIGIN_REGEX: str = r"^chrome-extension://[a-z0-9]{32}$"
 
     # File Upload
     MAX_FILE_SIZE_MB: int = 10
