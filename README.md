@@ -17,6 +17,7 @@ A modular architecture with a React frontend and FastAPI backend:
 - **OCR for scanned documents** (Tesseract)
 - **NLP preprocessing** and linguistic analysis (spaCy)
 - **LLM-based text simplification** with fact preservation validation (Gemini / OpenAI / Groq / OpenRouter / Mock)
+- **Rate-limit aware provider fallback**: bounded retries with exponential backoff and jitter that respect the provider's own `Retry-After` hint, so a long document survives a tokens-per-minute limit instead of failing
 - **Structured information extraction** (deadlines, eligibility, amounts, etc.)
 - **Cross-document fact validation** across original, simplified, and structured text
 - **Readability analysis** (Flesch Reading Ease, Flesch-Kincaid Grade Level)
@@ -405,6 +406,36 @@ extension.
   text; otherwise the card says "Grade not measured".
 - The `Alt+S` shortcut uses `chrome.action.openPopup()` and needs Chrome 127+.
 
+## Rate-Limit Handling (long documents)
+
+A long government notice is split into chunks and each chunk is sent to the LLM
+provider separately. Providers meter this against a per-minute token budget
+(Groq allows 8,000 tokens per minute on the free tier), so a long notice can
+exceed the budget part way through and the provider answers **HTTP 429**.
+
+Saral handles this in `backend/app/services/llm_retry.py` and
+`backend/app/services/llm_service.py`:
+
+| Situation | Behaviour |
+| --- | --- |
+| Provider answers 429 | The delay the provider asked for is read from `Retry-After`, `x-ratelimit-reset-tokens`, or the `"try again in 22.2s"` message, and the chunk is retried after that delay. |
+| Provider answers 5xx / `503 UNAVAILABLE` | Classified as transient and retried with exponential backoff and jitter. |
+| No provider hint | Exponential backoff (`base_delay * 2^(attempt-1)`) plus +/- 25 % jitter, capped at `LLM_RETRY_MAX_DELAY`. |
+| One provider is rate limited | The next configured provider is tried in the same round, so a healthy fallback finishes the chunk immediately. |
+| Every provider fails | The round is repeated after the backoff, up to `LLM_MAX_RETRIES` rounds. |
+| Authentication error | Never retried. |
+| All attempts exhausted | The request fails with a clear, actionable error. A failed chunk is **never** reported as a successful simplification. |
+
+The retry waits use `asyncio.sleep` and the provider calls run in a worker
+thread, so the FastAPI event loop is never blocked while the backend waits for
+a quota window to reset. `LLM_SIMPLIFICATION_TIMEOUT` (default 240 s) bounds
+the total time one request may spend waiting.
+
+Fact validation, readability analysis, history recording and the response
+contract are unchanged: a document that needed a fallback provider is still
+validated, and the response reports `validation_passed` and
+`validation_failures` exactly as before.
+
 ## Supported Input Formats
 - **Documents**: PDF (.pdf), Text (.txt), Word (.docx, .doc)
 - **Images**: JPEG (.jpg, .jpeg), PNG (.png)
@@ -427,22 +458,32 @@ extension.
 cd backend
 python -m pytest tests/ -v
 ```
-- **Total Tests**: 346 (+1 skipped when a local origin is not on the configured allow-list)
-- **Passing**: 346
+- **Total Tests**: 383 (+1 skipped when a local origin is not on the configured allow-list)
+- **Passing**: 383
 - **Failing**: 0
 - **Test Coverage**: ~70% across all modules
 
 **Extension Tests:**
 ```bash
 cd extension
-npm test                # 50 unit tests (node:test)
+npm test                # 56 unit tests (node:test)
 npm run verify:backend  # 31 live checks against a running backend
 ```
 - `src/__tests__/config.test.ts` — backend URL validation, limits, language support (13)
 - `src/__tests__/extractor.test.ts` — text cleaning, truncation, selection priority (11)
 - `src/__tests__/facts.test.ts` — important-fact derivation from backend responses (10)
-- `src/__tests__/errors.test.ts` — HTTP status to user-message mapping (8)
+- `src/__tests__/errors.test.ts` — HTTP status to user-message mapping (10)
 - `src/__tests__/api.test.ts` — request building and error handling against a stubbed `fetch` (8)
+- `src/__tests__/guards.test.ts` — duplicate-submission guard (4)
+
+**Backend rate-limit tests** (`backend/tests/test_llm_retry.py`, 37 tests):
+- Groq 429 followed by a successful retry, honouring the provider's retry delay
+- Groq 429 followed by a successful fallback provider
+- Gemini 503 `UNAVAILABLE` followed by recovery
+- All providers unavailable after the retry budget is exhausted
+- A failed chunk is never reported as a successful simplification
+- Fact validation still runs on the combined chunked output
+- One user action runs the pipeline exactly once (no duplicate processing)
 
 **Live API Testing (M12 Verification):**
 8 of 16 endpoints verified with live HTTP requests:
@@ -496,6 +537,11 @@ Key environment variables (set in `.env`):
 - `MAX_FILE_SIZE_MB`: Maximum upload file size (default: 10)
 - `CORS_ORIGINS`: Allowed CORS origins (JSON list)
 - `CORS_ORIGIN_REGEX`: Pattern for extra allowed origins (default: Chrome extension origins)
+- `LLM_MAX_RETRIES`: Attempts per provider for one chunk (default: 3)
+- `LLM_RETRY_BASE_DELAY`: First backoff step in seconds (default: 2.0)
+- `LLM_RETRY_MAX_DELAY`: Upper bound for a single wait in seconds (default: 60.0)
+- `LLM_RETRY_JITTER`: Jitter applied to the backoff, 0-1 (default: 0.25)
+- `LLM_SIMPLIFICATION_TIMEOUT`: Overall budget for one simplification request in seconds (default: 240)
 - `LLM_PROVIDER`: Provider for simplification (gemini, openai, groq, openrouter, mock, auto)
 - `LLM_API_KEY`: API key for the chosen LLM provider (backward compatibility)
 - `LLM_MODEL`: Default LLM model (default: gpt-3.5-turbo)

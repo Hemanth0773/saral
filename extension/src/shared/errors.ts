@@ -36,6 +36,14 @@ const STATUS_TITLES: Record<number, string> = {
   504: 'Backend timed out',
 };
 
+/** Titles for the backend's own error codes, which are more precise. */
+const CODE_TITLES: Record<string, string> = {
+  LLM_RATE_LIMITED: 'Rate limit reached',
+  LLM_QUOTA_EXHAUSTED: 'Service quota exhausted',
+  LLM_SERVICE_UNAVAILABLE: 'Service temporarily unavailable',
+  LLM_TIMEOUT: 'Backend timed out',
+};
+
 const STATUS_MESSAGES: Record<number, string> = {
   400: 'The backend rejected that request. Check the text, URL or file and try again.',
   404: 'The backend does not have that endpoint. Check the backend address in Saral settings.',
@@ -74,7 +82,7 @@ export function describeError(error: SaralError): FriendlyError {
     };
   }
 
-  const title = STATUS_TITLES[error.status] ?? 'Request failed';
+  const title = CODE_TITLES[error.code] ?? STATUS_TITLES[error.status] ?? 'Request failed';
   const fallback = STATUS_MESSAGES[error.status] ?? 'The request could not be completed.';
 
   // The backend already returns user-safe sentences for these codes.

@@ -10,8 +10,14 @@ import { joinUrl } from '../shared/config';
 import { SaralApiError } from '../shared/errors';
 import type { ApiRequestMessage, SaralEnvelope } from '../types/messages';
 
-/** Generous enough for cold LLM / NLLB / TTS calls, short enough to fail visibly. */
-export const REQUEST_TIMEOUT_MS = 90_000;
+/**
+ * Upper bound for a single backend call.
+ *
+ * A long government notice is split into chunks and each chunk is retried
+ * when the provider reports a rate limit, so the backend can legitimately
+ * spend a couple of minutes waiting for a provider quota window to reset.
+ */
+export const REQUEST_TIMEOUT_MS = 300_000;
 
 function isFormData(body: unknown): body is FormData {
   return typeof FormData !== 'undefined' && body instanceof FormData;
@@ -115,7 +121,8 @@ export async function performApiRequest(
         ok: false,
         error: {
           code: 'REQUEST_TIMEOUT',
-          message: 'The backend took too long to respond. Please try again.',
+          message:
+            'Saral stopped waiting for the backend. Large documents can take a few minutes while the backend waits for a provider rate limit to reset. Please try again.',
           status: 0,
         },
       };

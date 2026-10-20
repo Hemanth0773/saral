@@ -3,6 +3,8 @@ Simplification API routes.
 Handles LLM-based text simplification endpoints.
 """
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -93,8 +95,14 @@ async def simplify_document(request: SimplificationRequest) -> dict:
 
         # Perform simplification
         try:
-            # Generate simplification response
-            response_data = llm_service.generate_simplification_response(
+            # Generate simplification response.
+            #
+            # The provider calls and the retry backoff are blocking, so the
+            # work is handed to a worker thread. That keeps the FastAPI event
+            # loop free while a large document is simplified and while the
+            # backend waits for a rate limit window to reset.
+            response_data = await asyncio.to_thread(
+                llm_service.generate_simplification_response,
                 text=request.text,
                 target_grade_level=request.target_grade_level,
                 document_id=document_id
@@ -133,6 +141,19 @@ async def simplify_document(request: SimplificationRequest) -> dict:
                     "error": {
                         "code": "LLM_RATE_LIMITED",
                         "message": "LLM service rate limit exceeded. Please try again in a moment."
+                    }
+                }
+            )
+        except llm_service.LLMTransientError as e:
+            # Every provider was temporarily unavailable (overloaded, 5xx, ...)
+            logger.error(f"LLM service temporarily unavailable: {str(e)}")
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "LLM_SERVICE_UNAVAILABLE",
+                        "message": "The simplification service is temporarily busy. Please try again in a moment."
                     }
                 }
             )

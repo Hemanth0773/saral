@@ -165,7 +165,7 @@ The contracts are mirrored in `src/types/api.ts` and are covered by
 ```bash
 npm run typecheck        # tsc --noEmit (strict)
 npm run lint             # oxlint
-npm test                 # node:test unit tests (50 tests)
+npm test                 # node:test unit tests (56 tests)
 npm run build            # typecheck + popup build + service worker/content script builds
 npm run verify:dist      # checks that every manifest path exists inside dist/
 npm run verify:backend   # live end-to-end check against a running backend
@@ -188,6 +188,11 @@ per backend capability:
 
 ## Known limitations
 
+* **Long documents can take a few minutes.** A long notice is split into
+  chunks by the backend and each chunk is retried when the provider reports a
+  rate limit, so the request can legitimately spend up to a few minutes waiting
+  for a provider quota window to reset. The extension waits up to 300 s and
+  then reports that the backend is still working.
 * **Hindi is not available.** The backend translation model validates the
   language code against `['en', 'kn']`, so the Hindi option is shown in the
   popup as *Unavailable* and disabled. Saral never labels English output as

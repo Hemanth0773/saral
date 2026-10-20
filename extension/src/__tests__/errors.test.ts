@@ -20,6 +20,26 @@ test('HTTP 429 is reported as a quota problem and is retryable', () => {
   assert.match(friendly.message, /quota/i);
 });
 
+test('a rate limited service gets its own title', () => {
+  const friendly = describeError({
+    code: 'LLM_RATE_LIMITED',
+    message: 'LLM service rate limit exceeded. Please try again in a moment.',
+    status: 429,
+  });
+  assert.equal(friendly.title, 'Rate limit reached');
+  assert.equal(friendly.retryable, true);
+});
+
+test('a temporarily unavailable service gets its own title', () => {
+  const friendly = describeError({
+    code: 'LLM_SERVICE_UNAVAILABLE',
+    message: 'The simplification service is temporarily busy. Please try again in a moment.',
+    status: 503,
+  });
+  assert.equal(friendly.title, 'Service temporarily unavailable');
+  assert.equal(friendly.retryable, true);
+});
+
 test('HTTP 503 is reported as a service outage and is retryable', () => {
   const friendly = describeError({
     code: 'TRANSLATION_SERVICE_ERROR',

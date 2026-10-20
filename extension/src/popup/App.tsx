@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { saralApi } from '../services/api';
+import { createInFlightGuard } from './guards';
 import ActionBar from './components/ActionBar';
 import EmptyStateCard from './components/EmptyStateCard';
 import ErrorBanner from './components/ErrorBanner';
@@ -73,6 +74,8 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const lastAction = useRef<(() => void) | null>(null);
+  // Ensures a single Simplify request can be in flight at a time.
+  const simplifyGuard = useRef(createInFlightGuard()).current;
 
   useEffect(() => {
     let cancelled = false;
@@ -201,8 +204,12 @@ export default function App() {
   /* Simplify                                                           */
   /* ------------------------------------------------------------------ */
   const handleSimplify = useCallback(async () => {
+    // A second click while a request is running must not start another one.
+    if (!simplifyGuard.tryStart()) return;
+
     const trimmed = text.trim();
     if (!trimmed && !file) {
+      simplifyGuard.finish();
       setBanner({
         title: 'Nothing to simplify',
         message: 'Read the active tab, attach a document, or paste the notice text first.',
@@ -212,6 +219,7 @@ export default function App() {
       return;
     }
     if (trimmed.length > MAX_SIMPLIFY_TEXT_LENGTH) {
+      simplifyGuard.finish();
       setBanner({
         title: 'Text too long',
         message: `Saral sends at most ${MAX_SIMPLIFY_TEXT_LENGTH.toLocaleString()} characters at a time. Please shorten the text.`,
@@ -265,8 +273,9 @@ export default function App() {
     } finally {
       setIsReading(false);
       setIsSimplifying(false);
+      simplifyGuard.finish();
     }
-  }, [detectedLanguage, file, showError, text]);
+  }, [detectedLanguage, file, showError, simplifyGuard, text]);
 
   /* ------------------------------------------------------------------ */
   /* Translate                                                          */

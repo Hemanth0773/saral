@@ -1,8 +1,8 @@
 # Project Status: Cognitive Accessibility Simplifier
 
 **Last Updated**: October 20, 2026  
-**Current Milestone**: Milestone 13 (Saral — Browser Copilot Chrome Extension) - Complete  
-**Overall Completion**: ~100% (Milestones 1-13 complete, 346 backend tests + 51 extension tests passing)
+**Current Milestone**: Milestone 14 (Rate-Limit Reliability for long documents) - Complete  
+**Overall Completion**: ~100% (Milestones 1-14 complete, 383 backend tests + 56 extension tests passing)
 
 ---
 
@@ -22,20 +22,136 @@
 - ✅ **Milestone 11 (Database / History)**: Complete - 46 history tests passing, PostgreSQL integration with history tracking
 - ✅ **Milestone 12 (Final Testing, Security, Performance & Documentation)**: Complete - Full test suite (338 tests), security hardening, API verification, documentation finalized
 - ✅ **Milestone 13 (Saral — Browser Copilot Chrome Extension)**: Complete - Manifest V3 extension built, 50 unit tests + 31 live backend checks passing, UI verified by headless-browser screenshots
+- ✅ **Milestone 14 (Rate-Limit Reliability for long documents)**: Complete - Bounded provider-aware retries with backoff and jitter, Gemini 503 classified as transient, round-based provider fallback, 37 new backend tests passing
 
 ### Architecture Diagram
 - System architecture diagram created: `docs/system-architecture.svg` and `docs/system-architecture.png`
 - Shows 5-layer architecture: Client (React 19), API Gateway (FastAPI), Service Layer (NLP/AI modules), Data Layer (PostgreSQL + File Storage), External APIs (Hugging Face, Microsoft Edge TTS, Tesseract)
 
 ### Key Metrics
-- **Backend Tests**: 346 passing (+1 skipped), 0 failing
-- **Extension Unit Tests**: 50 passing (node:test)
+- **Backend Tests**: 383 passing (+1 skipped), 0 failing
+- **Extension Unit Tests**: 56 passing (node:test)
 - **Extension Live Backend Checks**: 31 passing, 0 failing
 - **Test Coverage**: ~70% across all modules
 - **API Endpoints**: 16 (8 live-tested with HTTP requests in M12; 8 more exercised by the extension verification)
 - **M12 Verification**: 8 of 16 endpoints tested with live HTTP requests; PostgreSQL history verified with 89+ records
 - **Security**: SSRF protection hardened to block RFC 1918 private IPs and link-local addresses (including AWS metadata 169.254.169.254)
 - **M13 Verification**: extension CORS origin allow-list tested (8 tests); web origins still restricted to `CORS_ORIGINS`
+- **M14 Verification**: rate-limit handling tested with 37 mocked-provider tests plus a live run that hit a real Groq 429 and recovered
+
+---
+
+## Milestone 14 — Rate-Limit Reliability for Long Documents
+
+**Status**: ✅ COMPLETE  
+**Date Completed**: October 20, 2026
+
+**Root Cause (confirmed from the source and from live provider responses)**
+
+A long notice (~6,400 characters) is split into four chunks of 2,000 characters
+(`CHUNK_SIZE`). Each chunk is a separate provider request, and every request
+reserves `prompt_tokens + max_tokens` against the provider's per-minute token
+budget. Measured against the real Groq API:
+
+```
+prompt_tokens: 1008   max_tokens: 2000   ->  Requested: 2965
+x-ratelimit-limit-tokens: 8000
+retry-after: 23
+"Please try again in 22.1775s"
+```
+
+Four chunks therefore reserve roughly 11,000 tokens against an 8,000 token
+budget, so the third or fourth chunk is rejected with **HTTP 429**. Before this
+milestone the chunk loop had **no retry at all**: it caught the 429, immediately
+sent the same large request to the fallback provider, and when that provider
+answered `503 UNAVAILABLE` it aborted the whole request.
+
+**Duplicate Request Investigation (result: not a bug)**
+
+The reported "a successful simplification followed immediately by another
+request for 6,370 characters" is the sequential chunk loop, not a second
+submission. A live run logs exactly one route line per user action:
+
+```
+Simplification request: target_grade_level=5, text_length=4874   <- once
+Text chunked into 3 chunks
+Processing 3 chunks separately
+Groq simplification successful     <- chunk 1
+Groq simplification successful     <- chunk 2
+Groq simplification successful     <- chunk 3
+```
+
+The website disables its submit button while `busy = uploading || processing ||
+submitting`, the extension disables Simplify while a request is in flight, and
+`frontend/src/services/api.ts` performs a single `fetch` with no retry
+wrapper. No duplicate submission was found, so no frontend behaviour was
+changed. The extension additionally gained an explicit in-flight guard
+(`extension/src/popup/guards.ts`) so the guarantee does not depend on the
+disabled attribute alone.
+
+**What Changed**
+
+| File | Change |
+| --- | --- |
+| `backend/app/services/llm_retry.py` | **New.** Retry policy, provider hint parsing (`Retry-After`, `x-ratelimit-reset-tokens`, `"try again in 22.2s"`), exponential backoff with jitter, transient-error classification. |
+| `backend/app/services/llm_service.py` | New `LLMTransientError`; provider errors now carry the provider's retry hint; unified OpenAI-compatible error mapping; the chunk loop became a round-based provider chain with bounded retries; `metadata.retry_count` now reports the failed provider attempts. |
+| `backend/app/api/routes/simplification.py` | The pipeline runs through `asyncio.to_thread`, so the FastAPI event loop is never blocked while the backend waits for a rate-limit window; new `LLM_TRANSIENT` mapping to HTTP 503 `LLM_SERVICE_UNAVAILABLE`. |
+| `backend/app/core/config.py` | `LLM_MAX_RETRIES`, `LLM_RETRY_BASE_DELAY`, `LLM_RETRY_MAX_DELAY`, `LLM_RETRY_JITTER`, `LLM_SIMPLIFICATION_TIMEOUT`. |
+| `extension/src/background/api.ts` | Request timeout raised to 300 s and the timeout message explains that a large document may wait for a rate limit to reset. |
+| `extension/src/shared/errors.ts` | Backend error codes get their own titles ("Rate limit reached", "Service temporarily unavailable"). |
+| `extension/src/popup/guards.ts` | **New.** In-flight guard that prevents a duplicate Simplify request. |
+
+**Behaviour After the Fix**
+
+- A 429 is retried after the delay the provider asked for.
+- A rate limited provider is complemented by the next configured provider in
+  the same round, so a healthy fallback finishes the chunk immediately.
+- A `503 UNAVAILABLE` is treated as transient and retried with backoff.
+- Authentication failures are never retried.
+- If every provider stays unavailable, the request fails with a clear,
+  actionable error. A failed chunk is never reported as a successful
+  simplification.
+- Fact validation, readability analysis, history recording and the response
+  contract are unchanged.
+
+**Live Verification (real Groq API, real backend)**
+
+```
+Groq API error (429): ... TPM: Limit 8000, Used 7358, Requested 1716. Please try again in 8.055s.
+Groq failed (LLMRateLimitError)
+Gemini simplification successful
+Chunk 1/3 simplified with Gemini.        <- fallback worked
+Groq API error (429): ... Please try again in 262.5ms.
+Gemini simplification successful
+Chunk 2/3 simplified with Gemini.        <- fallback worked
+Groq simplification successful
+Chunk 3/3 simplified with Groq.           <- primary recovered
+Simplification completed successfully: processing_time=20680ms
+```
+
+The same request previously failed outright with a 503.
+
+**Test Results**
+
+- Backend: **383 passing, 1 skipped, 0 failing** (was 346; +37 new rate-limit tests, no regressions)
+- Extension: **56 passing** (was 50; +4 in-flight guard tests, +2 error-title tests)
+- Website build: succeeds, lint unchanged (4 pre-existing warnings)
+
+**Known Limitations (Honest)**
+
+- The Groq free tier allows 8,000 tokens per minute, which is genuinely small
+  for a long notice. The chunk size (`CHUNK_SIZE=2000`) and `LLM_MAX_TOKENS`
+  (2000) were deliberately **not** reduced: measurements showed the completion
+  already reaches 1,957 of the 2,000 token cap for a 2,796 character chunk, so
+  shrinking either would risk silently truncating a chunk and losing facts. The
+  retry policy is the correct fix.
+- When a fallback provider takes over some chunks, fact preservation can be
+  weaker (observed 7/14 facts preserved versus 14/14 on a single provider).
+  Saral's validation stage reports this honestly through `validation_passed`
+  and `validation_failures`, and the UI shows the warning.
+- The `Alt+S` shortcut and the extension's manual Chrome pass still need a
+  human; the extension UI was verified by headless rendering and live API
+  checks only.
 
 ---
 
@@ -66,7 +182,7 @@
 - `extension/src/popup/components/` - Header, HeroCard, InputCard, ActionBar, SummaryCard, AudioDeck, FactList, SettingsPanel
 - `extension/src/shared/facts.ts` - Important-fact derivation from backend responses
 - `extension/src/shared/errors.ts` - HTTP status to user-message mapping
-- `extension/src/__tests__/` - 50 unit tests
+- `extension/src/__tests__/` - 56 unit tests
 - `extension/scripts/verify-backend.mjs` - 31 live checks
 
 **Backend Changes Required (and Why)**
@@ -514,15 +630,16 @@ Extracted:
 - **Sep 22, 2026**: Complete documentation and test counts finalized
 - **Sep 23, 2026**: M12 security hardening (SSRF), Postman collection updated, architecture diagram created
 - **Sep 24, 2026**: Test suite verified — all 338 tests passing; documentation finalized
-- **Oct 20, 2026**: Milestone 13 — Saral Browser Copilot Chrome extension implemented, built and verified (346 backend tests, 51 extension unit tests, 31 live backend checks)
+- **Oct 20, 2026**: Milestone 13 — Saral Browser Copilot Chrome extension implemented, built and verified (346 backend tests, 50 extension unit tests, 31 live backend checks)
+- **Oct 20, 2026**: Milestone 14 — Rate-limit reliability for long documents: bounded provider-aware retries, backoff with jitter, transient 5xx handling, round-based provider fallback (383 backend tests, 56 extension unit tests)
 - **Target**: Project is complete and ready for demonstration
 
 ---
 
 ## Test Execution (as of 2026-10-20)
 ```
-Total Backend Tests: 346
-Passing: 346 ✅
+Total Backend Tests: 383
+Passing: 383 ✅
 Failing: 0 ❌
 Skipped: 1 (a local origin that is not on the configured CORS allow-list)
 Errors: 0
@@ -540,13 +657,15 @@ Test Files:
 - tests/test_tts.py (29 tests) - 29/29 passing
 - tests/test_history.py (46 tests) - 46/46 passing
 - tests/test_cors.py (8 tests) - 7/8 passing, 1 skipped  [NEW in M13]
+- tests/test_llm_retry.py (37 tests) - 37/37 passing  [NEW in M14]
 
 Extension Tests:
 - extension/src/__tests__/config.test.ts (13 tests) - passing
 - extension/src/__tests__/extractor.test.ts (11 tests) - passing
 - extension/src/__tests__/facts.test.ts (10 tests) - passing
-- extension/src/__tests__/errors.test.ts (8 tests) - passing
+- extension/src/__tests__/errors.test.ts (10 tests) - passing
 - extension/src/__tests__/api.test.ts (8 tests) - passing
+- extension/src/__tests__/guards.test.ts (4 tests) - passing  [NEW in M14]
 - extension/scripts/verify-backend.mjs (31 live checks) - passing
 ```
 
@@ -574,15 +693,15 @@ python -m pytest tests/ -v
 
 ```bash
 cd extension
-npm test                # 50 unit tests
+npm test                # 56 unit tests
 npm run typecheck       # strict TypeScript check
 npm run lint            # oxlint
 npm run verify:backend  # 31 live checks (backend must be running)
 ```
 
 ### Failing Tests Summary
-- Backend: none - 346 tests passing, 0 failures, 0 errors, 1 skipped
-- Extension: none - 50 unit tests passing, 31 live backend checks passing
+- Backend: none - 383 tests passing, 0 failures, 0 errors, 1 skipped
+- Extension: none - 56 unit tests passing, 31 live backend checks passing
 
 ---
 
@@ -672,9 +791,10 @@ Key variables:
 - ✅ M11: Database/History (PostgreSQL, history API, 46 tests)
 - ✅ M12: Final Testing, Security, Performance & Documentation (338 tests, SSRF hardening, Postman, docs, architecture diagram)
 - ✅ M13: Saral — Browser Copilot Chrome extension (Manifest V3, 50 unit tests, 31 live backend checks)
+- ✅ M14: Rate-limit reliability for long documents (bounded provider-aware retries, backoff with jitter, transient 5xx handling, 37 new backend tests)
 
 ### Test Coverage
-- **346/346 backend tests passing** (100%, 1 skipped)
+- **383/383 backend tests passing** (100%, 1 skipped)
 - **50/50 extension unit tests passing**
 - **31/31 extension live backend checks passing**
 - **Zero regressions** from M1-M12

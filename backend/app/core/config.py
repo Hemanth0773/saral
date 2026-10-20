@@ -54,6 +54,18 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-3.5-turbo"
     LLM_TEMPERATURE: float = 0.3  # Lower = more consistent/factual
     LLM_MAX_TOKENS: int = 2000
+
+    # LLM retry / rate-limit handling
+    # Maximum number of attempts per provider for a single chunk. A Groq
+    # "tokens per minute" 429 is temporary, so the request is retried after
+    # the delay the provider asked for instead of failing the whole document.
+    LLM_MAX_RETRIES: int = 3
+    LLM_RETRY_BASE_DELAY: float = 2.0  # seconds, first backoff step
+    LLM_RETRY_MAX_DELAY: float = 60.0  # seconds, upper bound for one wait
+    LLM_RETRY_JITTER: float = 0.25  # +/- fraction applied to the backoff
+    # Overall budget for one simplification request. Bounds the total time
+    # spent waiting between retries so a request can never hang forever.
+    LLM_SIMPLIFICATION_TIMEOUT: int = 240  # seconds
     
     # Gemini Configuration
     GEMINI_API_KEY: str = ""
