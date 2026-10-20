@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { API_BASE_URL, extractDocumentUrl, simplifyDocument, type DocumentExtractionResponse, type SimplificationResponse } from '../services/api';
+import InstantSummary from './InstantSummary';
+import SimplifiedMarkdown from './SimplifiedMarkdown';
 
 type TrySaralNowProps = {
   sampleUrl: string | null;
@@ -340,6 +342,20 @@ export default function TrySaralNow({ sampleUrl, samplePulse, onSimplificationCo
               <p className="text-sm font-medium text-neutral-800 leading-relaxed">
                 Simplified to Grade {simplificationResult.target_grade_level} · {simplificationResult.model_used} · {simplificationResult.processing_time_ms}ms
               </p>
+              <div className="mt-3">
+                <p className="mb-1.5 flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-neutral-800">
+                  <span className="w-2.5 h-2.5 bg-black rounded-full"></span>
+                  Instant Summary
+                </p>
+                <InstantSummary
+                  items={simplificationResult.instant_summary}
+                  hidden={
+                    typeof simplificationResult.metadata?.summary_hidden === 'number'
+                      ? simplificationResult.metadata.summary_hidden
+                      : 0
+                  }
+                />
+              </div>
               {!simplificationResult.validation_passed && simplificationResult.validation_failures.length > 0 && (
                 <div className="mt-3 rounded-xl bg-white stroke-border-thin p-3" role="status">
                   <p className="text-xs font-extrabold uppercase tracking-wider text-neutral-800">
@@ -358,9 +374,11 @@ export default function TrySaralNow({ sampleUrl, samplePulse, onSimplificationCo
                 </div>
               )}
               {simplificationResult.simplified_text && (
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-xs font-extrabold uppercase tracking-wider">View simplified text</summary>
-                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-white stroke-border-thin p-3 text-xs leading-relaxed text-neutral-700">{simplificationResult.simplified_text}</pre>
+                <details className="mt-3" open>
+                  <summary className="cursor-pointer text-xs font-extrabold uppercase tracking-wider">Simplified document</summary>
+                  <div className="mt-2 max-h-96 overflow-auto break-words rounded-xl bg-white stroke-border-thin p-3 text-sm font-medium leading-relaxed text-neutral-700">
+                    <SimplifiedMarkdown text={simplificationResult.simplified_text} />
+                  </div>
                 </details>
               )}
             </div>

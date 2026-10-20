@@ -2,8 +2,8 @@
  * End-to-end check: the real backend response for the scholarship notice,
  * run through the real extension fact derivation and Markdown parser.
  */
-import { buildFactSummary } from '../src/shared/facts.ts';
-import { normaliseMarkdown, parseMarkdown } from '../src/popup/markdown.ts';
+import { toFactItem } from '../src/shared/facts.ts';
+import { normaliseMarkdown, parseMarkdown } from '../../shared/saral-ui/markdown.ts';
 
 const BASE = process.env.SARAL_BASE_URL ?? 'http://127.0.0.1:8000';
 
@@ -47,30 +47,27 @@ const simplification = await post('/api/documents/simplify', {
   text: NOTICE,
   target_grade_level: 5,
 });
-const extraction = await post('/api/documents/extract-info', {
-  text: NOTICE,
-  extract_title: true,
-  extract_summary: true,
-});
-
-const summary = buildFactSummary(
-  extraction.structured_information,
-  simplification.preserved_facts,
-);
+// The backend builds the canonical summary, so the website and the extension
+// render exactly the same facts.
+const summary = (simplification.instant_summary ?? []).map(toFactItem);
 
 console.log('=== INSTANT SUMMARY BULLETS (as the popup renders them) ===');
-for (const fact of summary.facts) {
+for (const fact of summary) {
   console.log(`  ${fact.label}: ${fact.value}`);
 }
-console.log(`  (${summary.total} facts found, ${summary.hidden} hidden)`);
+console.log(
+  `  (${simplification.metadata?.summary_total ?? summary.length} facts found, ` +
+    `${simplification.metadata?.summary_hidden ?? 0} hidden)`,
+);
 
 console.log('\n=== MALFORMED PATTERN CHECK ===');
-const rendered = summary.facts.map((fact) => `${fact.label}: ${fact.value}`).join('\n');
+const rendered = summary.map((fact) => `${fact.label}: ${fact.value}`).join('\n');
 const checks = {
   'duplicated label (Label:Label:)': /(\w[\w ]*):\1:/i.test(rendered),
   'page marker as a fact': /page\s+\d+/i.test(rendered),
   'heading as a fact': /PROCEDURE FOR AVAILING/.test(rendered),
   'fragment starting with punctuation': /^[^:]*: [,;]/m.test(rendered),
+  'age direction lost (30+ instead of under 30)': /\b30\+ years/.test(rendered),
 };
 for (const [name, failed] of Object.entries(checks)) {
   console.log(`  ${failed ? 'PROBLEM' : 'ok'}: ${name}`);

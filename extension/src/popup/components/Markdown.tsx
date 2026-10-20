@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { parseInline, parseMarkdown, type BlockNode, type InlineNode } from '../markdown';
+import { parseInline, parseMarkdown, type BlockNode, type InlineNode } from '@saral-ui/markdown';
 
 type MarkdownProps = {
   text: string;

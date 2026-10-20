@@ -170,6 +170,24 @@ def extract_surrounding_text(text: str, start: int, end: int, context_chars: int
     return result.strip()
 
 
+def normalise_fact_text(text: str) -> str:
+    """
+    Normalises the spacing and unit formatting of a text.
+
+    A model may write "25 %" where the source wrote "25%", or "Rs 2,50,000"
+    where the source wrote "Rs. 2,50,000". Those are the same fact and must
+    not be reported as lost.
+    """
+    normalised = text.replace("\u00a0", " ").replace("\u202f", " ").replace("\u2009", " ")
+    # "25 %" is the same fact as "25%"
+    normalised = re.sub(r"(\d)\s+%", r"\1%", normalised)
+    # "Rs 2,50,000" is the same fact as "Rs. 2,50,000"
+    normalised = re.sub(r"\bRs\s+\.", "Rs.", normalised)
+    # "Rs 2,50,000" is the same fact as "Rs. 2,50,000"
+    normalised = re.sub(r"\bRs\s+(?=\d)", "Rs.", normalised)
+    return normalised
+
+
 def validate_fact_preservation(original_text: str, simplified_text: str) -> Tuple[List[PreservedFact], List[str]]:
     """
     Validate that critical facts are preserved in simplified text.
@@ -183,6 +201,9 @@ def validate_fact_preservation(original_text: str, simplified_text: str) -> Tupl
     """
     facts = extract_critical_facts(original_text)
     validation_failures = []
+    # Compare against a normalised copy so a reformatted fact still matches.
+    normalised_simplified = normalise_fact_text(simplified_text)
+    normalised_facts = [normalise_fact_text(fact.value) for fact in facts]
 
     for fact in facts:
         # Check if fact value appears in simplified text
@@ -191,7 +212,7 @@ def validate_fact_preservation(original_text: str, simplified_text: str) -> Tupl
         # For dates, normalize and compare
         if fact.fact_type == "deadline":
             # Try exact match first
-            if fact.value in simplified_text:
+            if normalised_facts[facts.index(fact)] in normalised_simplified:
                 fact_in_simplified = True
             else:
                 # Try normalizing date formats
@@ -207,7 +228,7 @@ def validate_fact_preservation(original_text: str, simplified_text: str) -> Tupl
                 ]
 
                 for pattern in date_patterns:
-                    for match in re.finditer(pattern, simplified_text, re.IGNORECASE):
+                    for match in re.finditer(pattern, normalised_simplified, re.IGNORECASE):
                         found_date_str = match.group(1) if match.lastindex else match.group(0)
                         normalized_found_date = normalize_date_format(found_date_str)
 
@@ -221,30 +242,30 @@ def validate_fact_preservation(original_text: str, simplified_text: str) -> Tupl
         # For money, check for currency symbols and numbers
         elif fact.fact_type == "money":
             # Extract numeric value
-            numeric_value = re.sub(r'[^\d.,]', '', fact.value)
+            numeric_value = re.sub(r'[^\d.,]', '', normalised_facts[facts.index(fact)])
             # Normalize by removing commas for comparison
             normalized_numeric = numeric_value.replace(',', '')
 
             # Look for the value in simplified text
-            if re.search(f'\\b{re.escape(numeric_value)}\\b', simplified_text):
+            if re.search(f'\\b{re.escape(numeric_value)}\\b', normalised_simplified):
                 fact_in_simplified = True
             # Also try without commas
             elif re.search(f'\\b{normalized_numeric}\\b', simplified_text):
                 fact_in_simplified = True
             # Also check for Indian currency symbol near the number
-            elif re.search(f'[₹Rs\\.]?\\s*{re.escape(numeric_value)}', simplified_text):
+            elif re.search(f'[₹Rs\\.]?\\s*{re.escape(numeric_value)}', normalised_simplified):
                 fact_in_simplified = True
             # Try alternative formats (with/without commas)
-            elif re.search(f'[₹Rs\\.]?\\s*{normalized_numeric}', simplified_text):
+            elif re.search(f'[₹Rs\\.]?\\s*{normalized_numeric}', normalised_simplified):
                 fact_in_simplified = True
 
         # For percentages, ages, quantities - check for numbers
         elif fact.fact_type in ["percentage", "age", "quantity"]:
             # Extract the numeric part
-            numeric_match = re.search(r'(\d+(?:\.\d+)?)', fact.value)
+            numeric_match = re.search(r'(\d+(?:\.\d+)?)', normalised_facts[facts.index(fact)])
             if numeric_match:
                 numeric_value = numeric_match.group(1)
-                if re.search(f'\\b{numeric_value}\\b', simplified_text):
+                if re.search(f'\\b{numeric_value}\\b', normalised_simplified):
                     fact_in_simplified = True
 
         fact.preserved_in_simplified = fact_in_simplified

@@ -91,6 +91,14 @@ export type DocumentExtractionResponse = {
   };
 };
 
+export type InstantSummaryItem = {
+  id: string;
+  kind: string;
+  label: string;
+  value: string;
+  severity: string;
+};
+
 export type SimplificationResponse = {
   success: boolean;
   document_id: string;
@@ -112,6 +120,11 @@ export type SimplificationResponse = {
     preserved_in_simplified: boolean;
   }>;
   key_terms: string[];
+  /**
+   * The canonical Instant Summary, built by the backend. The Chrome extension
+   * renders the same list, so both interfaces show the same facts.
+   */
+  instant_summary: InstantSummaryItem[];
   validation_passed: boolean;
   validation_failures: string[];
   metadata: Record<string, unknown>;

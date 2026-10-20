@@ -6,7 +6,7 @@
  * ever invented to fill a gap in the UI. Items that are not trustworthy
  * (page markers, fragments, headings) are dropped rather than shown.
  */
-import type { PreservedFact, StructuredInformation } from '../types/api';
+import type { InstantSummaryItem, PreservedFact, StructuredInformation } from '../types/api';
 
 export type FactKind =
   | 'deadline'
@@ -47,7 +47,7 @@ const PRESERVED_FACT_LABELS: Record<string, { label: string; kind: FactKind }> =
 export const MAX_DOCUMENT_NAMES = 5;
 
 /** Maximum number of summary bullets rendered in the popup card. */
-export const MAX_SUMMARY_FACTS = 10;
+export const MAX_SUMMARY_FACTS = 12;
 
 /** "Page 5 of 7" and friends are pagination, never a fact. */
 const PAGE_MARKER_PATTERN = /^\s*pages?\s+\d+(\s*(of|out\s+of)\s*\d+)?\s*\.?$/i;
@@ -268,6 +268,22 @@ export function factsFromPreserved(preserved: PreservedFact[] | undefined): Fact
     });
   }
   return items;
+}
+
+/**
+ * Converts a summary item built by the backend into the shape the popup
+ * renders. The backend owns the content, so both interfaces show the same
+ * facts and the same labels.
+ */
+export function toFactItem(item: InstantSummaryItem): FactItem {
+  return {
+    id: item.id,
+    kind: item.kind as FactKind,
+    label: item.label,
+    value: item.value,
+    text: item.value,
+    severity: item.severity as FactSeverity,
+  };
 }
 
 export interface FactSummary {

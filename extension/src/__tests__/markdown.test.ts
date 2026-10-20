@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { hasMarkdown, normaliseMarkdown, parseInline, parseMarkdown } from '../popup/markdown.ts';
+import { hasMarkdown, normaliseMarkdown, parseInline, parseMarkdown } from '../../../shared/saral-ui/markdown.ts';
 
 const SOURCE_ROOT = fileURLToPath(new URL('../', import.meta.url));
 

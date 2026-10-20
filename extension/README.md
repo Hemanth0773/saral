@@ -165,7 +165,7 @@ The contracts are mirrored in `src/types/api.ts` and are covered by
 ```bash
 npm run typecheck        # tsc --noEmit (strict)
 npm run lint             # oxlint
-npm test                 # node:test unit tests (94 tests)
+npm test                 # node:test unit tests (104 tests)
 npm run build            # typecheck + popup build + service worker/content script builds
 npm run verify:dist      # checks that every manifest path exists inside dist/
 npm run verify:backend   # live end-to-end check against a running backend
@@ -189,9 +189,16 @@ per backend capability:
 
 ## Instant Summary
 
-The "Instant Summary" card is built from the backend's structured extraction
-(`/api/documents/extract-info`) and the fact-preservation list of the
-simplification response. It is deliberately conservative:
+The "Instant Summary" card is built by the **backend** and returned in the
+simplify response as `instant_summary`. The website renders the same list, so
+both interfaces always show the same facts with the same labels.
+
+The labels are chosen for the document at hand - "Eligibility", "Age
+requirement", "Documents needed", "Deadline", "Scholarship amount",
+"Conditions", "Application process", "Selection" - and only facts the source
+supports are shown.
+
+The card is deliberately conservative:
 
 * A fact is only shown when it is a complete statement or a short label.
 * Section headings (for example `PROCEDURE FOR AVAILING THE SCHOLARSHIP`) are
@@ -199,12 +206,14 @@ simplification response. It is deliberately conservative:
 * Pagination markers such as `Page 5 of 7` are never facts.
 * The same statement is only shown once, even when the backend reports it both
   as a procedure step and as an eligibility rule.
+* An age rule keeps its direction: "under 30 years" is never "30+ years".
 * A document name is a short noun phrase; a sentence that merely mentions a
   document is not shown as one.
 * When nothing can be extracted with confidence the card says so instead of
   showing malformed bullets.
 
-The card lists at most ten bullets and says how many further facts were found.
+The card lists at most twelve bullets and says how many further facts were
+found.
 
 ## Markdown in the simplified text
 
@@ -212,8 +221,9 @@ The simplified text can contain Markdown (`**bold**`, `- a list`,
 `### a heading`) and, when a model escapes its own output, artefacts such as
 `**` or `&#x20;`.
 
-The popup parses the text into a node tree and renders it as React elements
-(`src/popup/markdown.ts`, `src/popup/components/Markdown.tsx`). The model
+The popup parses the text with the **shared** parser
+(`shared/saral-ui/markdown.ts`, also used by the website) into a node tree and
+renders it as React elements (`src/popup/components/Markdown.tsx`). The model
 output is **never** injected as HTML, so nothing it contains can turn into
 markup. The parser handles paragraphs, headings, ordered and unordered lists,
 fenced code, bold, italic and inline code, and it removes the encoding

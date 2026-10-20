@@ -6,6 +6,9 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "types": ["vite/client"],
+    "paths": {
+      "@saral-ui/*": ["../shared/saral-ui/*"]
+    },
 
     "strict": true,
     "noUnusedLocals": true,
@@ -23,5 +26,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "vite.config.ts", "vite.scripts.config.ts"]
+  "include": ["src", "../shared/saral-ui", "vite.config.ts", "vite.scripts.config.ts"]
 }

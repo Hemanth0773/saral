@@ -1,8 +1,8 @@
 # Project Status: Cognitive Accessibility Simplifier
 
 **Last Updated**: October 20, 2026  
-**Current Milestone**: Milestone 16 (Instant Summary quality and Markdown rendering) - Complete  
-**Overall Completion**: ~100% (Milestones 1-16 complete, 430 backend tests + 94 extension tests passing)
+**Current Milestone**: Milestone 17 (One canonical output for website and extension) - Complete  
+**Overall Completion**: ~100% (Milestones 1-17 complete, 457 backend tests + 104 extension tests passing)
 
 ---
 
@@ -25,14 +25,15 @@
 - ✅ **Milestone 14 (Rate-Limit Reliability for long documents)**: Complete - Bounded provider-aware retries with backoff and jitter, Gemini 503 classified as transient, round-based provider fallback, 37 new backend tests passing
 - ✅ **Milestone 15 (Fidelity Validation - No Invented Facts)**: Complete - Page artifacts stripped before the model sees the text, prompt hardened, four new fidelity checks, 31 new backend tests passing
 - ✅ **Milestone 16 (Instant Summary Quality and Markdown Rendering)**: Complete - Extraction returns complete statements, headings and page markers excluded, safe Markdown renderer, 14 new backend tests and 38 new extension tests passing
+- ✅ **Milestone 17 (One Canonical Output for Website and Extension)**: Complete - Backend builds the Instant Summary, shared Markdown parser, age direction preserved, completeness rule added, 26 new backend tests and 10 new extension tests passing
 
 ### Architecture Diagram
 - System architecture diagram created: `docs/system-architecture.svg` and `docs/system-architecture.png`
 - Shows 5-layer architecture: Client (React 19), API Gateway (FastAPI), Service Layer (NLP/AI modules), Data Layer (PostgreSQL + File Storage), External APIs (Hugging Face, Microsoft Edge TTS, Tesseract)
 
 ### Key Metrics
-- **Backend Tests**: 430 passing (+1 skipped), 0 failing
-- **Extension Unit Tests**: 94 passing (node:test)
+- **Backend Tests**: 457 passing (+1 skipped), 0 failing
+- **Extension Unit Tests**: 104 passing (node:test)
 - **Extension Live Backend Checks**: 31 passing, 0 failing
 - **Test Coverage**: ~70% across all modules
 - **API Endpoints**: 16 (8 live-tested with HTTP requests in M12; 8 more exercised by the extension verification)
@@ -42,6 +43,79 @@
 - **M14 Verification**: rate-limit handling tested with 37 mocked-provider tests plus a live run that hit a real Groq 429 and recovered
 - **M15 Verification**: fidelity checks tested with 31 mocked-model tests plus two live runs of the reported scholarship notice
 - **M16 Verification**: extraction quality tested with 14 backend tests; Instant Summary and Markdown tested with 38 extension tests plus a live run of the reported scholarship notice and a headless rendering of the popup
+- **M17 Verification**: the canonical output tested with 26 backend tests and 10 extension tests; the website and the extension were rendered in a browser from the same API response and show the same facts
+
+---
+
+## Milestone 17 — One Canonical Output for Website and Extension
+
+**Status**: ✅ COMPLETE  
+**Date Completed**: October 20, 2026
+
+**Why the two interfaces disagreed (confirmed from the code)**
+
+Both interfaces already called the same endpoint with the same payload
+(`POST /api/documents/simplify` with `{text, target_grade_level: 5}`) and the
+backend already produced one result. The difference was entirely in the
+response handling:
+
+* the extension rendered the Instant Summary and parsed the simplified text as
+  Markdown, the website dumped the same string into a `<pre>`;
+* the extension derived the summary on the client from a second
+  `/api/documents/extract-info` call, the website had no summary at all.
+
+So the backend was already the source of truth for the text, and the two
+interfaces simply processed the response differently.
+
+**What Changed**
+
+| File | Change |
+| --- | --- |
+| `backend/app/services/summary_service.py` | **New.** Builds the canonical Instant Summary from the structured extraction: meaningful labels, de-duplication, page markers and headings excluded, a cap on the procedure steps. |
+| `backend/app/api/routes/simplification.py` | Builds the summary and returns it as `instant_summary`, with the counts in `metadata`. |
+| `backend/app/schemas/simplification.py` | New `SummaryItem` model and the additive `instant_summary` field. |
+| `backend/app/schemas/extraction.py` | `ExtractedAgeRequirement` gained an optional `qualifier` so the direction of an age rule survives. |
+| `backend/app/services/extraction_service.py` | The age direction is captured ("under 30" is an upper bound, "30 or older" a lower bound); abbreviations such as "Rs." no longer split a rule; numbered headings are not facts; obligations for applicants and institutions are captured. |
+| `backend/app/services/llm_service.py` | A completeness rule in the prompt ("simplify the whole document, never shorten it into a summary"), and `LLM_REASONING_EFFORT` so a reasoning model does not spend the answer budget on internal reasoning. |
+| `backend/app/services/validation_service.py` | Fact matching normalises "25 %" against "25%", so a reformatted fact is no longer reported as lost. |
+| `shared/saral-ui/markdown.ts` | **New.** The Markdown parser moved here and is used by both interfaces. |
+| `extension/src/popup/App.tsx` | Uses the backend's `instant_summary`; the structured extraction is only a fallback for an older backend. |
+| `frontend/src/components/InstantSummary.tsx` | **New.** The website renders the canonical summary with its own styling. |
+| `frontend/src/components/SimplifiedMarkdown.tsx` | **New.** The website renders the simplified text with the shared parser. |
+
+**Live Verification**
+
+The same real backend response rendered in a browser:
+
+```
+Website  : Deadline: 2026-07-31 | Documents needed: ... | Amount: ₹2,50,000 |
+            Age requirement: under 30 years | Eligibility: ... | Conditions: ...
+Extension: Deadline: 2026-07-31 | Documents needed: ... | Amount: ₹2,50,000 |
+            Age requirement: under 30 years | Eligibility: ... | Conditions: ...
+```
+
+The age rule keeps its direction ("under 30 years", never "30+ years"), the
+simplified text is complete with headings and lists, and `validation_passed`
+is true.
+
+**Test Results**
+
+- Backend: **457 passing, 1 skipped, 0 failing** (was 430; +26 canonical output tests)
+- Extension: **104 passing** (was 94; +10 canonical output tests)
+- Website build: succeeds; lint unchanged at 6 pre-existing warnings
+
+**Known Limitations (Honest)**
+
+- The Instant Summary is still pattern based. A fact phrased in a way the
+  patterns do not recognise is not reported - the summary shows fewer facts,
+  never wrong ones.
+- The summary shows at most twelve bullets and four procedure steps; the rest
+  are counted below the card.
+- A statement repeated with different wording can still appear twice when
+  neither contains the other.
+- The completeness rule is a prompt instruction. The validation stage reports
+  a document that lost a fact, but it cannot restore a section the model
+  skipped.
 
 ---
 
@@ -823,14 +897,15 @@ Extracted:
 - **Oct 20, 2026**: Milestone 14 — Rate-limit reliability for long documents: bounded provider-aware retries, backoff with jitter, transient 5xx handling, round-based provider fallback (383 backend tests, 56 extension unit tests)
 - **Oct 20, 2026**: Milestone 15 — Fidelity validation: page artifacts stripped before the model sees the text, hardened prompts, four new fidelity checks, validation failures now shown in both UIs (414 backend tests, 56 extension unit tests)
 - **Oct 20, 2026**: Milestone 16 — Instant Summary quality and Markdown rendering: complete statements from the extraction, headings and page markers excluded, duplicated label removed, safe Markdown renderer (430 backend tests, 94 extension unit tests)
+- **Oct 20, 2026**: Milestone 17 — One canonical output: the backend builds the Instant Summary, the Markdown parser is shared, the age direction is preserved, and the website shows the same result as the extension (457 backend tests, 104 extension unit tests)
 - **Target**: Project is complete and ready for demonstration
 
 ---
 
 ## Test Execution (as of 2026-10-20)
 ```
-Total Backend Tests: 430
-Passing: 430 ✅
+Total Backend Tests: 457
+Passing: 457 ✅
 Failing: 0 ❌
 Skipped: 1 (a local origin that is not on the configured CORS allow-list)
 Errors: 0
@@ -888,15 +963,15 @@ python -m pytest tests/ -v
 
 ```bash
 cd extension
-npm test                # 94 unit tests
+npm test                # 104 unit tests
 npm run typecheck       # strict TypeScript check
 npm run lint            # oxlint
 npm run verify:backend  # 31 live checks (backend must be running)
 ```
 
 ### Failing Tests Summary
-- Backend: none - 430 tests passing, 0 failures, 0 errors, 1 skipped
-- Extension: none - 94 unit tests passing, 31 live backend checks passing
+- Backend: none - 457 tests passing, 0 failures, 0 errors, 1 skipped
+- Extension: none - 104 unit tests passing, 31 live backend checks passing
 
 ---
 
@@ -989,9 +1064,10 @@ Key variables:
 - ✅ M14: Rate-limit reliability for long documents (bounded provider-aware retries, backoff with jitter, transient 5xx handling, 37 new backend tests)
 - ✅ M15: Fidelity validation - no invented facts (page artifacts stripped before the model sees the text, hardened prompts, four fidelity checks, 31 new backend tests)
 - ✅ M16: Instant Summary quality and Markdown rendering (complete statements from the extraction, headings and page markers excluded, safe Markdown renderer, 14 new backend tests and 38 new extension tests)
+- ✅ M17: One canonical output for website and extension (backend builds the summary, shared Markdown parser, age direction preserved, 26 new backend tests and 10 new extension tests)
 
 ### Test Coverage
-- **430/430 backend tests passing** (100%, 1 skipped)
+- **457/457 backend tests passing** (100%, 1 skipped)
 - **50/50 extension unit tests passing**
 - **31/31 extension live backend checks passing**
 - **Zero regressions** from M1-M12

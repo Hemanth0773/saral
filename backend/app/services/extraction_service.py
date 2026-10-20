@@ -66,6 +66,37 @@ ACTION_WORD_RE = re.compile(
 # A document name is short; a long span is a sentence, not a name.
 MAX_DOCUMENT_NAME_LENGTH = 60
 
+# Short words that end a sentence rather than abbreviate something.
+_NOT_ABBREVIATIONS = {
+    "the", "and", "but", "for", "nor", "are", "was", "were", "has", "have", "had",
+    "its", "all", "you", "may", "can", "not", "his", "her", "she", "they", "them",
+    "this", "that", "who", "how", "why", "now", "new", "old", "per", "via", "one",
+    "two", "any", "our", "out", "off", "let", "set", "get", "far", "too", "see",
+    "say", "use", "own", "due", "end", "ask", "aid", "add",
+}
+
+# Words that show a statement is about who qualifies.
+ELIGIBILITY_KEYWORDS = (
+    "eligible",
+    "eligibility",
+    "qualif",
+    "must be a",
+    "must be an",
+    "must have",
+    "shall have",
+    "reside",
+    "belong",
+    "citizen",
+    "income",
+    "marks",
+    "not be in receipt",
+    "not in receipt of",
+    "admitted",
+    "enrolled",
+    "pursuing",
+    "seeking",
+)
+
 
 def _is_page_marker(text: str) -> bool:
     """True when the text is only a pagination marker."""
@@ -80,11 +111,58 @@ def _is_heading(text: str) -> bool:
     return all(char.isupper() for char in letters)
 
 
+def _is_heading_line(line: str) -> bool:
+    """
+    True when a line is a section heading.
+
+    A numbered or lettered heading such as "1. ELIGIBILITY" or "IV. PROCEDURE"
+    is a title, not a statement, and must not become a fact.
+    """
+    candidate = line.strip()
+    candidate = re.sub(r"^\s*(\d{1,3}|[IVXLCDM]{1,6})[.)\s]\s*", "", candidate)
+    candidate = re.sub(r"^\s*[-*•#]+\s*", "", candidate)
+    candidate = candidate.strip()
+    if len(candidate) < 3:
+        return False
+    letters = [char for char in candidate if char.isalpha()]
+    if len(letters) < 3:
+        return False
+    if not all(char.isupper() for char in letters):
+        return False
+    return " " in candidate or len(letters) >= 4
+
+
+def _ends_sentence(text: str, index: int) -> bool:
+    """
+    True when the punctuation at ``index`` really ends a sentence.
+
+    "Rs. 2,50,000" and "No. 3" contain a full stop that does not end a
+    sentence, and splitting on it would cut a rule in half.
+    """
+    char = text[index]
+    if char not in ".!?":
+        return False
+    if char != ".":
+        return True
+
+    start = index
+    while start > 0 and (text[start - 1].isalnum() or text[start - 1] in "'-"):
+        start -= 1
+    word = text[start:index]
+    if len(word) <= 3 and word[:1].isupper() and word.lower() not in _NOT_ABBREVIATIONS:
+        # An abbreviation such as "Rs." or "No." does not end a sentence.
+        return False
+    return True
+
+
 def _clean_fragment(text: str) -> str:
     """Removes leading and trailing punctuation and list noise from a fragment."""
     cleaned = text.strip()
     cleaned = re.sub(r"^[\s,;:\-–—•*]+", "", cleaned)
     cleaned = re.sub(r"[\s,;:\-–—•*]+$", "", cleaned)
+    # Drop a leading list marker such as "III." or "4)" that belongs to the
+    # numbering of the source, not to the statement itself.
+    cleaned = re.sub(r"^(?:\d{1,3}|[IVXLCDM]{1,6})[.)\s]+\s*", "", cleaned)
     return cleaned.strip()
 
 
@@ -121,20 +199,23 @@ def _sentence_around(text: str, start: int, end: int) -> str:
     index = start - 1
     while index >= 0:
         char = text[index]
-        if char in ".!?":
-            if index + 1 >= len(text) or text[index + 1].isspace():
-                left = index + 1
-                break
-        elif char == "\n":
+        if char in ".!?" and _ends_sentence(text, index):
+            left = index + 1
+            break
+        if char == "\n":
             if index + 1 < len(text) and text[index + 1] in "\r\n":
                 left = index + 1
                 break
         index -= 1
 
     right = len(text)
-    match = re.search(r"[.!?](\s|$)|\n[ \t]*\r?\n", text[end:])
-    if match:
-        right = end + match.start() + 1
+    for match in re.finditer(r"[.!?]|\n[ \t]*\r?\n", text[end:]):
+        if match.group(0).startswith("\n"):
+            right = end + match.start()
+            break
+        if _ends_sentence(text, end + match.start()):
+            right = end + match.start() + 1
+            break
 
     return text[left:right].strip()
 
@@ -277,41 +358,70 @@ def extract_important_dates(text: str) -> List[ExtractedDate]:
 
 
 def extract_age_requirements(text: str) -> List[ExtractedAgeRequirement]:
-    """Extract age requirements."""
+    """
+    Extract age requirements, keeping the direction of the rule.
+
+    "must be under 30 years" and "must be at least 30 years" are opposites,
+    so the word that says which side of the number applies is captured as
+    well and stored in ``qualifier``.
+    """
     requirements = []
 
-    # Patterns for age requirements - ORDER MATTERS! Check ranges first
+    # ORDER MATTERS: the explicit directions are matched before the plain
+    # "18 years old" form, so a rule is never read the wrong way round.
     age_patterns = [
-        # Range patterns (check these first to avoid matching individual numbers)
-        (r'between\s+(\d{1,3})\s+and\s+(\d{1,3})\s+years?', 1, 2),
-        (r'(\d{1,3})\s+to\s+(\d{1,3})\s+years?', 1, 2),
-        # Single age patterns
-        (r'(?:must\s+be\s+)?(?:at\s+least\s+|minimum\s+age\s+(?:is\s+)?)?(\d{1,3})\s+years?\s+(?:old|of\s+age)', 1, None),
+        (r'between\s+(?P<low>\d{1,3})\s+and\s+(?P<high>\d{1,3})\s+years?', 'range'),
+        (r'(?P<low>\d{1,3})\s+to\s+(?P<high>\d{1,3})\s+years?', 'range'),
+        (r'(?P<qual>under|below|less\s+than|not\s+more\s+than|not\s+above|'
+         r'not\s+exceeding|up\s+to|within)\s+(?P<high>\d{1,3})\s+years?', 'upper'),
+        (r'(?P<qual>at\s+least|not\s+less\s+than|no\s+less\s+than|'
+         r'minimum\s+age\s+(?:is\s+)?|minimum\s+of|more\s+than\s+or\s+equal\s+to)\s+'
+         r'(?P<low>\d{1,3})\s+years?', 'lower'),
+        (r'(?P<qual>over|above|more\s+than|exceeding)\s+(?P<low>\d{1,3})\s+years?', 'lower'),
+        (r'(?P<low>\d{1,3})\s+years?\s+(?P<qual>or\s+older|or\s+above|or\s+more|and\s+above)', 'lower'),
+        (r'(?P<high>\d{1,3})\s+years?\s+(?P<qual>or\s+younger|or\s+below|or\s+less|and\s+below)', 'upper'),
+        (r'(?P<low>\d{1,3})\s+years?\s+(?:old|of\s+age)', 'lower'),
     ]
 
     seen = set()
-    for pattern_info in age_patterns:
-        pattern = pattern_info[0]
-        min_idx = pattern_info[1]
-        max_idx = pattern_info[2]
+    taken: List[Tuple[int, int]] = []
 
+    for pattern, kind in age_patterns:
         for match in re.finditer(pattern, text, re.IGNORECASE):
-            source_text = extract_surrounding_text(text, match.start(), match.end(), 50)
+            # A rule that was already read in a more specific form is skipped.
+            if any(match.start() < end and match.end() > start for start, end in taken):
+                continue
 
-            min_age = int(match.group(min_idx))
-            max_age = int(match.group(max_idx)) if max_idx else None
+            groups = match.groupdict()
+            low = groups.get('low')
+            high = groups.get('high')
+            qualifier = groups.get('qual')
 
-            # Ensure min_age is truly the minimum when we have a range
-            if max_age is not None and min_age > max_age:
-                min_age, max_age = max_age, min_age
+            minimum_age = int(low) if low is not None else None
+            maximum_age = int(high) if high is not None else None
 
-            key = (min_age, max_age)
+            if kind == 'range' and minimum_age is not None and maximum_age is not None:
+                # Make sure the smaller number is the lower bound.
+                if maximum_age < minimum_age:
+                    minimum_age, maximum_age = maximum_age, minimum_age
+            elif kind == 'upper':
+                minimum_age = None
+            elif kind == 'lower':
+                maximum_age = None
+
+            if minimum_age is None and maximum_age is None:
+                continue
+
+            key = (minimum_age, maximum_age)
 
             if key not in seen:
                 seen.add(key)
+                taken.append((match.start(), match.end()))
+                source_text = extract_surrounding_text(text, match.start(), match.end(), 50)
                 requirements.append(ExtractedAgeRequirement(
-                    minimum_age=min_age,
-                    maximum_age=max_age,
+                    minimum_age=minimum_age,
+                    maximum_age=maximum_age,
+                    qualifier=qualifier,
                     original_text=source_text
                 ))
 
@@ -645,15 +755,31 @@ def extract_eligibility_requirements(text: str) -> List[ExtractedRequirement]:
     # statement rather than a fragment that stops at the end of a line.
     eligibility_patterns = [
         r'(?:eligible|eligibility)[:\s]+',
+        # A rule about the applicant. An age bound ("must be under 30 years")
+        # is excluded here, because the age requirement already reports it.
         r'(?:candidates?|applicants?|students?)\s+'
-        r'(?:must|should|shall|are\s+required\s+to|is\s+required\s+to|have\s+to|has\s+to)\s+',
+        r'(?:must|should|shall)\s+'
+        r'(?!be\s+(?:under|below|above|over|at\s+least|not\s+more|less\s+than|more\s+than)\b)',
     ]
 
     seen = set()
 
     for pattern in eligibility_patterns:
         for match in re.finditer(pattern, text, re.IGNORECASE):
-            sentence = _sentence_around(text, match.start(), match.end())
+            # A heading such as "1. ELIGIBILITY" introduces the section, it is
+            # not a rule about the applicant. The first statement of the
+            # section is the rule the section is about.
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            line_end = text.find("\n", match.start())
+            if line_end == -1:
+                line_end = len(text)
+
+            if _is_heading_line(text[line_start:line_end]):
+                following = _first_sentence(text[match.end():].lstrip("\n"))
+                sentence = following
+            else:
+                sentence = _sentence_around(text, match.start(), match.end())
+
             req = _clean_fragment(sentence)
 
             # A requirement has to be a statement, not a heading and not a
@@ -663,6 +789,9 @@ def extract_eligibility_requirements(text: str) -> List[ExtractedRequirement]:
             if _is_page_marker(req) or _is_heading(req):
                 continue
             if not ACTION_WORD_RE.search(req):
+                continue
+            # A rule about who qualifies, not a step of the procedure.
+            if not any(keyword in req.lower() for keyword in ELIGIBILITY_KEYWORDS):
                 continue
 
             if req not in seen:
@@ -700,6 +829,8 @@ def extract_application_procedure(text: str) -> List[ExtractedProcedure]:
                 continue
             if _is_page_marker(step_text) or _is_heading(step_text):
                 continue
+            if _is_heading_line(step_text):
+                continue
             if not ACTION_WORD_RE.search(step_text):
                 continue
 
@@ -725,6 +856,11 @@ def extract_important_conditions(text: str) -> List[ExtractedCondition]:
         r'(?:Note|Important)\s*[:\-]\s*',
         r'(?:However|But|Exception|Provided|Condition)\s*[:\-]?\s*',
         r'(?:shall\s+not|must\s+not|cannot)\s+',
+        # An obligation for one of the parties, for example "Students must
+        # apply" or "Institutions must verify". It keeps the instruction for
+        # applicants and the instruction for institutions apart.
+        r'(?:students?|applicants?|candidates?|institutions?|parents?)\s+'
+        r'(?:must|shall|should|are\s+required\s+to|is\s+required\s+to)\s+',
     ]
 
     seen = set()
@@ -732,6 +868,9 @@ def extract_important_conditions(text: str) -> List[ExtractedCondition]:
     for pattern in condition_patterns:
         for match in re.finditer(pattern, text, re.IGNORECASE):
             cond = _clean_fragment(_sentence_around(text, match.start(), match.end()))
+            # The label already says this is a condition, so the marker in the
+            # source does not need to be repeated.
+            cond = re.sub(r"^(?:Note|Important)\s*[:\-]\s*", "", cond, flags=re.IGNORECASE).strip()
 
             if len(cond) < 20 or len(cond) > 300:
                 continue

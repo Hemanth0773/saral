@@ -52,6 +52,15 @@ export interface SimplificationSection {
   grade_level_improvement?: number | null;
 }
 
+/** One fact of the canonical Instant Summary, built by the backend. */
+export interface InstantSummaryItem {
+  id: string;
+  kind: string;
+  label: string;
+  value: string;
+  severity: string;
+}
+
 /** `POST /api/documents/simplify` */
 export interface SimplificationResponse {
   success: boolean;
@@ -64,6 +73,11 @@ export interface SimplificationResponse {
   sections: SimplificationSection[];
   preserved_facts: PreservedFact[];
   key_terms: string[];
+  /**
+   * The canonical Instant Summary. The website and the extension render this
+   * same list, so both interfaces show the same facts.
+   */
+  instant_summary: InstantSummaryItem[];
   validation_passed: boolean;
   validation_failures: string[];
   metadata: Record<string, unknown>;

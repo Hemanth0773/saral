@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-3.5-turbo"
     LLM_TEMPERATURE: float = 0.3  # Lower = more consistent/factual
     LLM_MAX_TOKENS: int = 2000
+    # Reasoning effort for reasoning models such as gpt-oss. These models spend
+    # part of max_tokens on internal reasoning, which can leave the answer
+    # truncated. "low" keeps the output budget for the answer. Set to an empty
+    # string to leave the provider default.
+    LLM_REASONING_EFFORT: str = "low"
 
     # LLM retry / rate-limit handling
     # Maximum number of attempts per provider for a single chunk. A Groq

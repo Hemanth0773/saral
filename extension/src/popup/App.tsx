@@ -22,7 +22,7 @@ import {
   joinUrl,
 } from '../shared/config';
 import { describeError, toSaralError } from '../shared/errors';
-import { buildFactSummary } from '../shared/facts';
+import { buildFactSummary, toFactItem } from '../shared/facts';
 import type {
   ExtractionResponse,
   ReadabilityResponse,
@@ -261,11 +261,16 @@ export default function App() {
       // Facts and readability are extra insights; a failure here must not
       // discard the simplified text the user already received.
       void Promise.allSettled([
-        saralApi.extractInfo(sourceText).then(setStructured),
         saralApi
           .readability(sourceText, result.simplified_text, TARGET_GRADE_LEVEL)
           .then(setReadability),
       ]);
+
+      // The backend builds the canonical Instant Summary. Only an older
+      // backend that does not return it needs the structured extraction.
+      if (!result.instant_summary || !result.instant_summary.length) {
+        void saralApi.extractInfo(sourceText).then(setStructured);
+      }
     } catch (error) {
       showError(error, () => {
         void handleSimplify();
@@ -377,10 +382,17 @@ export default function App() {
     void chrome.tabs.create({ url: chrome.runtime.getURL('help.html') });
   }, []);
 
-  const factSummary = useMemo(
-    () => buildFactSummary(structured?.structured_information, simplification?.preserved_facts),
-    [simplification, structured],
-  );
+  const factSummary = useMemo(() => {
+    // The canonical summary comes from the backend, so the website and the
+    // extension always show the same facts. The client side derivation is
+    // only a fallback for an older backend that does not return it.
+    const canonical = simplification?.instant_summary;
+    if (canonical && canonical.length) {
+      const facts = canonical.map(toFactItem);
+      return { facts, total: facts.length, hidden: 0 };
+    }
+    return buildFactSummary(structured?.structured_information, simplification?.preserved_facts);
+  }, [simplification, structured]);
 
   const gradeLabel = useMemo(() => {
     const grade = readability?.simplified?.flesch_kincaid_grade;
@@ -391,6 +403,11 @@ export default function App() {
   }, [readability]);
 
   const audioUrl = useMemo(() => (tts ? joinUrl(baseUrl, tts.audio_url) : null), [baseUrl, tts]);
+
+  const hiddenFacts = useMemo(() => {
+    const hidden = simplification?.metadata?.summary_hidden;
+    return typeof hidden === 'number' ? hidden : 0;
+  }, [simplification]);
 
   const canSimplify = Boolean(text.trim() || file) && !isSimplifying && !isReading;
   const canTranslate = Boolean(simplification) && !isTranslating;
@@ -460,7 +477,7 @@ export default function App() {
                 translation ? `Translation · ${translation.target_language.toUpperCase()}` : null
               }
               facts={factSummary.facts}
-              hiddenFacts={factSummary.hidden}
+              hiddenFacts={hiddenFacts}
               gradeLabel={gradeLabel}
               validationPassed={simplification.validation_passed}
               validationFailures={simplification.validation_failures}

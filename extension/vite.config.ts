@@ -5,6 +5,7 @@ import { defineConfig, type Plugin } from 'vite'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 const iconsDir = fileURLToPath(new URL('./icons', import.meta.url))
+const sharedDir = fileURLToPath(new URL('../shared/saral-ui', import.meta.url))
 
 /**
  * Copies the static extension assets (manifest + toolbar icons) into the build
@@ -26,6 +27,18 @@ function copyExtensionAssets(): Plugin {
 export default defineConfig({
   root,
   plugins: [react(), copyExtensionAssets()],
+  resolve: {
+    alias: {
+      // The Markdown parser is shared with the website so both interfaces
+      // render the same content in the same way.
+      '@saral-ui': sharedDir,
+    },
+  },
+  server: {
+    fs: {
+      allow: [fileURLToPath(new URL('..', import.meta.url))],
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

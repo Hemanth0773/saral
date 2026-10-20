@@ -11,6 +11,7 @@ from app.core.logging import get_logger
 from app.schemas.simplification import SimplificationRequest, SimplificationResponse
 from app.schemas.document import ErrorResponse
 from app.services import llm_service, validation_service
+from app.services import extraction_service, summary_service
 from app.services.document_service import generate_document_id
 
 logger = get_logger(__name__)
@@ -199,6 +200,29 @@ async def simplify_document(request: SimplificationRequest) -> dict:
 
         # Validate fact preservation
         response_data = validation_service.validate_final_response(response_data)
+
+        # Build the canonical Instant Summary. The website and the Chrome
+        # extension render this same list, so the two interfaces cannot show
+        # different facts for the same document. It is derived from the
+        # structured extraction of the source text, not from the model output.
+        try:
+            structured_info = extraction_service.extract_structured_information(
+                text=request.text,
+                extract_title=False,
+                extract_summary=False,
+            )
+            summary = summary_service.build_instant_summary(
+                structured_info,
+                response_data.get("preserved_facts"),
+            )
+            response_data["instant_summary"] = summary["items"]
+            response_data.setdefault("metadata", {})["summary_total"] = summary["total"]
+            response_data["metadata"]["summary_hidden"] = summary["hidden"]
+        except Exception as summary_error:
+            # The summary is an addition, never a reason to fail a
+            # simplification that already succeeded.
+            logger.warning(f"Could not build the instant summary: {str(summary_error)}")
+            response_data["instant_summary"] = []
 
         # Check validation results
         if not response_data["validation_passed"]:

@@ -21,6 +21,7 @@ A modular architecture with a React frontend and FastAPI backend:
 - **Structured information extraction** (deadlines, eligibility, amounts, etc.)
 - **Fidelity validation** that checks the simplified text did not *add* anything: page markers turned into instructions, dropped qualifiers ("normally"), swapped entity types ("university" → "school") and invented numbers
 - **Consistent structured extraction** that returns complete statements instead of fragments, ignores section headings and page markers, and understands Roman-numeral clauses
+- **One canonical output**: the backend builds the Instant Summary and the detailed simplified text, and the website and the Chrome extension render the same result
 - **Cross-document fact validation** across original, simplified, and structured text
 - **Readability analysis** (Flesch Reading Ease, Flesch-Kincaid Grade Level)
 - **Translation** between English and Kannada (NLLB-200 model)
@@ -233,6 +234,9 @@ MiniProject_CSE7102/
 │   │   ├── types/
 │   │   └── __tests__/
 │   └── README.md
+├── shared/
+│   └── saral-ui/
+│       └── markdown.ts      Markdown parser shared by the website and the extension
 ├── docs/
 │   ├── system-architecture.svg
 │   └── system-architecture.png
@@ -398,15 +402,52 @@ extension.
 `GET /api/media/audio/{filename}`.
 
 ### Extension Instant Summary and Markdown
-The "Instant Summary" card is built from the structured extraction and the
-fact-preservation list. It only shows complete statements or short labels:
-section headings and page markers are never facts, a sentence that merely
-mentions a document is not shown as a document, and the same statement is never
-shown twice. When nothing can be extracted with confidence the card says so
-instead of showing malformed bullets.
+The "Instant Summary" card is built by the backend and returned in the
+simplify response as `instant_summary`. The website and the extension both
+render that list, so they always show the same facts with the same labels. The
+labels are chosen for the document at hand - "Eligibility", "Age requirement",
+"Documents needed", "Deadline", "Scholarship amount", "Conditions",
+"Application process", "Selection" - and only facts the source supports are
+shown.
 
-The simplified text is parsed into a node tree and rendered as React elements,
-so Markdown renders correctly while model output is never injected as HTML.
+The simplified text is parsed into a node tree by a **shared** Markdown parser
+(`shared/saral-ui/markdown.ts`) and rendered as React elements, so Markdown
+renders correctly and model output is never injected as HTML. The website and
+the extension use the same parser, so the same text reads the same way in both.
+
+## One Canonical Output
+
+The backend produces one result for a given input and configuration. Neither
+interface simplifies, summarises or rewrites anything on its own.
+
+```
+                       ┌──────────────────────────────┐
+   website ─┐          │  POST /api/documents/simplify │
+   extension ┘          │  {text, target_grade_level}   │
+                       └───────────────┬──────────────┘
+                                       │
+                       ┌───────────────▼──────────────┐
+                       │  LLM service (one prompt)      │
+                       │  chunking + retry + fallback   │
+                       └───────────────┬──────────────┘
+                                       │
+                       ┌───────────────▼──────────────┐
+                       │  simplified_text               │
+                       │  instant_summary               │
+                       │  preserved_facts               │
+                       │  validation_passed/failures    │
+                       └───────────────┬──────────────┘
+                          ┌────────────┴────────────┐
+                          ▼                         ▼
+                   website renders            extension renders
+```
+
+* The same prompt and the same service produce the text for both interfaces.
+* The Instant Summary is derived from the structured extraction of the
+  **source** document, never from the model output.
+* Translation, audio and copy all use the same validated `simplified_text`.
+* The Markdown parser is shared (`shared/saral-ui/markdown.ts`), so the two
+  interfaces cannot read the same text differently.
 
 ### Extension Known Limitations
 - **Hindi is not available**: the backend translation model validates the
@@ -507,15 +548,15 @@ validated, and the response reports `validation_passed` and
 cd backend
 python -m pytest tests/ -v
 ```
-- **Total Tests**: 430 (+1 skipped when a local origin is not on the configured allow-list)
-- **Passing**: 430
+- **Total Tests**: 457 (+1 skipped when a local origin is not on the configured allow-list)
+- **Passing**: 457
 - **Failing**: 0
 - **Test Coverage**: ~70% across all modules
 
 **Extension Tests:**
 ```bash
 cd extension
-npm test                # 94 unit tests (node:test)
+npm test                # 104 unit tests (node:test)
 npm run verify:backend  # 31 live checks against a running backend
 npm run verify:scholarship # live Instant Summary check against a running backend
 ```
@@ -527,6 +568,7 @@ npm run verify:scholarship # live Instant Summary check against a running backen
 - `src/__tests__/guards.test.ts` — duplicate-submission guard (4)
 - `src/__tests__/markdown.test.ts` — Markdown parsing, escape artefacts, HTML safety (23)
 - `src/__tests__/factsSummary.test.ts` — Instant Summary quality, duplicated labels, headings, page markers (15)
+- `src/__tests__/canonicalOutput.test.ts` — the canonical summary is shared with the website (10)
 
 **Backend rate-limit tests** (`backend/tests/test_llm_retry.py`, 37 tests):- Groq 429 followed by a successful retry, honouring the provider's retry delay
 - Groq 429 followed by a successful fallback provider
@@ -551,6 +593,15 @@ npm run verify:scholarship # live Instant Summary check against a running backen
 - Eligibility requirements and conditions are complete statements
 - The nine Roman-numeral clauses of a scholarship notice are captured as steps
 - Document names are short noun phrases, not sentence fragments
+
+**Backend canonical output tests** (`backend/tests/test_canonical_output.py`, 24 tests):
+- The endpoint returns the same Instant Summary for the same input
+- The summary is built from the source document, never from the model output
+- Labels are never duplicated, page markers and headings are never facts
+- The age rule keeps its direction ("under 30 years" is never "30+ years")
+- Long documents are chunked and combined in order, without cutting a clause
+- Broken model output is reported instead of being presented as a good result
+- Markdown, including escaped characters and HTML, is passed through unchanged
 
 **Live API Testing (M12 Verification):**
 8 of 16 endpoints verified with live HTTP requests:
@@ -609,6 +660,7 @@ Key environment variables (set in `.env`):
 - `LLM_RETRY_MAX_DELAY`: Upper bound for a single wait in seconds (default: 60.0)
 - `LLM_RETRY_JITTER`: Jitter applied to the backoff, 0-1 (default: 0.25)
 - `LLM_SIMPLIFICATION_TIMEOUT`: Overall budget for one simplification request in seconds (default: 240)
+- `LLM_REASONING_EFFORT`: Reasoning effort for reasoning models such as gpt-oss (default: low). These models spend part of `LLM_MAX_TOKENS` on internal reasoning, which can leave the answer truncated. Set to an empty string to use the provider default.
 - `LLM_PROVIDER`: Provider for simplification (gemini, openai, groq, openrouter, mock, auto)
 - `LLM_API_KEY`: API key for the chosen LLM provider (backward compatibility)
 - `LLM_MODEL`: Default LLM model (default: gpt-3.5-turbo)

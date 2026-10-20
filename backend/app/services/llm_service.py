@@ -130,19 +130,33 @@ CRITICAL RULES:
 11. Do not change the kind of organisation. If the source says "university", "college" or "institute", keep that exact word - never replace it with "school", and never replace "school" with "college".
 12. NEVER turn a statement about the document into a statement about what the reader must do. "It is declared in the application" stays about the application, and must not become "you must declare it in section 4 of the form".
 
+COMPLETENESS - THIS MATTERS MOST:
+- Simplify the WHOLE document. Every section, paragraph and list of the source must appear in the output.
+- Never shorten the document into a summary, never skip a section, and never stop before the end of the source.
+- Keep the sections of the source in the same order.
+- Do not turn eligibility rules into procedure steps, or procedure steps into eligibility rules, only to make the output look organised.
+- Keep instructions for applicants and instructions for institutions separate, and make clear who each instruction is for.
+
 SIMPLIFICATION GUIDELINES:
 1. Break long sentences into shorter, clearer sentences.
 2. Replace unnecessarily complex words with simpler synonyms when meaning remains unchanged.
 3. Use active voice where it improves clarity.
-4. Use headings or bullet points only to mirror structure that already exists in the source, and never to invent new sections.
-5. Keep paragraphs focused on a single topic.
+4. Use clear, meaningful headings and subheadings so the reader can follow the document. A heading may name something the source describes, but it must never introduce a requirement, a step or a fact that the source does not state.
+5. Keep paragraphs short and focused on a single topic, and use bullet or numbered lists when the source lists several things.
 6. Use second-person ("you") when referring to the reader/applicant, but only for what the source actually requires.
 7. Aim for reading grade level specified by the user.
+
+DOCUMENT STRUCTURE:
+- Keep the order of the source document. Do not move sections around.
+- Do not turn eligibility rules into procedure steps, or procedure steps into eligibility rules, only to make the output look organised.
+- Keep instructions for applicants and instructions for institutions separate, and make clear who each instruction is for.
+- Keep the headings of the source as the headings of the simplified text wherever possible.
 
 FORMAT INSTRUCTIONS:
 - Return only the simplified text without commentary.
 - Preserve all important factual information exactly as it appears.
 - Keep every condition, exception, qualifier and obligation from the source.
+- Use Markdown for headings (###), bold (**text**) and lists (- or 1.) where they help the reader.
 - Use clear, plain language appropriate for the target grade level."""
 
     def _raise_provider_error(self, response: Any, provider_name: str) -> None:
@@ -216,7 +230,7 @@ CRITICAL INFORMATION TO PRESERVE EXACTLY:
 - All organization and scheme names
 - The exact kind of organisation mentioned (university, college, institute, school, ministry, department, board, authority)
 
-IMPORTANT: Do not change any numbers, dates, or factual information. Do not remove or upgrade any qualifier, condition or exception. Do not add any instruction, step or requirement that the text does not state.
+IMPORTANT: Do not change any numbers, dates, or factual information. Do not remove or upgrade any qualifier, condition or exception. Do not add any instruction, step or requirement that the text does not state. Keep the order of the source document, and keep instructions for applicants separate from instructions for institutions.
 
 DOCUMENT ARTIFACTS: any page number, page marker (for example "Page 4 of 7"), header, footer or page-break text in the text below is a printing artifact and not content. Leave it out completely. Never turn it into an instruction or a step.
 
@@ -246,7 +260,7 @@ CRITICAL INFORMATION TO PRESERVE EXACTLY:
 - All organization and scheme names
 - The exact kind of organisation mentioned (university, college, institute, school, ministry, department, board, authority)
 
-IMPORTANT: Do not change any numbers, dates, or factual information. Do not remove or upgrade any qualifier, condition or exception. Do not add any instruction, step or requirement that the text does not state.
+IMPORTANT: Do not change any numbers, dates, or factual information. Do not remove or upgrade any qualifier, condition or exception. Do not add any instruction, step or requirement that the text does not state. Keep the order of the source document, and keep instructions for applicants separate from instructions for institutions.
 
 DOCUMENT ARTIFACTS: any page number, page marker (for example "Page 4 of 7"), header, footer or page-break text in the text below is a printing artifact and not content. Leave it out completely. Never turn it into an instruction or a step.
 
@@ -846,6 +860,48 @@ class GroqProvider(LLMProvider):
         if not self.api_key:
             raise LLMServiceError("Groq API key not configured. Please set GROQ_API_KEY in environment variables.")
 
+    def _build_payload(self, prompt: str) -> Dict[str, Any]:
+        """Builds the request payload for the Groq chat completions API."""
+        payload: Dict[str, Any] = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": self._get_system_prompt()},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens
+        }
+
+        effort = (settings.LLM_REASONING_EFFORT or "").strip().lower()
+        if effort and "gpt-oss" in self.model.lower():
+            # A reasoning model spends part of max_tokens on internal
+            # reasoning, which can leave the answer truncated.
+            payload["reasoning_effort"] = effort
+
+        return payload
+
+    def _post(self, payload: Dict[str, Any]) -> Any:
+        """
+        Sends the request, retrying once without ``reasoning_effort`` when the
+        provider does not know that parameter.
+        """
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(
+                f"{self.base_url}/chat/completions",
+                headers=self.headers,
+                json=payload
+            )
+
+            if response.status_code == 400 and "reasoning_effort" in _response_text(response):
+                reduced = {key: value for key, value in payload.items() if key != "reasoning_effort"}
+                response = client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=self.headers,
+                    json=reduced
+                )
+
+            return response
+
     def simplify_text(self, text: str, target_grade_level: int) -> str:
         """
         Simplify text using Groq API.
@@ -863,34 +919,19 @@ class GroqProvider(LLMProvider):
         prompt = self._build_simplification_prompt(text, target_grade_level)
 
         try:
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": self._get_system_prompt()},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens
-            }
+            response = self._post(self._build_payload(prompt))
 
-            with httpx.Client(timeout=30.0) as client:
-                response = client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self.headers,
-                    json=payload
-                )
+            if response.status_code != 200:
+                # Handle specific error types (rate limit, auth, transient)
+                self._raise_provider_error(response, "Groq")
 
-                if response.status_code != 200:
-                    # Handle specific error types (rate limit, auth, transient)
-                    self._raise_provider_error(response, "Groq")
+            result = response.json()
+            simplified_text = self._require_text(
+                result["choices"][0]["message"]["content"], "Groq"
+            )
 
-                result = response.json()
-                simplified_text = self._require_text(
-                    result["choices"][0]["message"]["content"], "Groq"
-                )
-
-                logger.info(f"Groq simplification successful")
-                return simplified_text
+            logger.info(f"Groq simplification successful")
+            return simplified_text
 
         except httpx.TimeoutException:
             error_msg = "Groq API timeout"
@@ -925,52 +966,39 @@ class GroqProvider(LLMProvider):
         prompt = self._build_structured_simplification_prompt(text, target_grade_level)
 
         try:
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": self._get_system_prompt()},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": self.temperature,
-                "max_tokens": self.max_tokens,
-                "response_format": {"type": "json_object"}
-            }
+            payload = self._build_payload(prompt)
+            payload["response_format"] = {"type": "json_object"}
 
-            with httpx.Client(timeout=30.0) as client:
-                response = client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self.headers,
-                    json=payload
-                )
+            response = self._post(payload)
 
-                if response.status_code != 200:
-                    # Handle specific error types (rate limit, auth, transient)
-                    self._raise_provider_error(response, "Groq")
+            if response.status_code != 200:
+                # Handle specific error types (rate limit, auth, transient)
+                self._raise_provider_error(response, "Groq")
 
-                result = response.json()
-                response_text = self._require_text(
-                    result["choices"][0]["message"]["content"], "Groq"
-                )
+            result = response.json()
+            response_text = self._require_text(
+                result["choices"][0]["message"]["content"], "Groq"
+            )
 
-                try:
-                    structured_result = json.loads(response_text)
-                    structured_result.setdefault("simplified_text", "")
-                    structured_result.setdefault("key_terms", [])
-                    structured_result.setdefault("sections", [])
+            try:
+                structured_result = json.loads(response_text)
+                structured_result.setdefault("simplified_text", "")
+                structured_result.setdefault("key_terms", [])
+                structured_result.setdefault("sections", [])
 
-                    logger.info(f"Groq structured simplification successful")
-                    return structured_result
+                logger.info(f"Groq structured simplification successful")
+                return structured_result
 
-                except json.JSONDecodeError as e:
-                    error_msg = f"Failed to parse Groq JSON response: {str(e)}"
-                    logger.error(error_msg)
-                    # Fall back to regular simplification
-                    simplified_text = self.simplify_text(text, target_grade_level)
-                    return {
-                        "simplified_text": simplified_text,
-                        "key_terms": [],
-                        "sections": []
-                    }
+            except json.JSONDecodeError as e:
+                error_msg = f"Failed to parse Groq JSON response: {str(e)}"
+                logger.error(error_msg)
+                # Fall back to regular simplification
+                simplified_text = self.simplify_text(text, target_grade_level)
+                return {
+                    "simplified_text": simplified_text,
+                    "key_terms": [],
+                    "sections": []
+                }
 
         except httpx.TimeoutException:
             error_msg = "Groq API timeout"

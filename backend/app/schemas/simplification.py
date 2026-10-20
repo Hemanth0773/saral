@@ -38,6 +38,21 @@ class SimplificationRequest(BaseModel):
         }
 
 
+class SummaryItem(BaseModel):
+    """One fact of the canonical Instant Summary"""
+    id: str = Field(..., description="Stable identifier for the item")
+    kind: str = Field(
+        ...,
+        description=(
+            "Category of the fact: deadline, date, document, money, percentage, "
+            "age, condition, eligibility, contact or procedure"
+        ),
+    )
+    label: str = Field(..., description="Label shown before the fact, for example 'Documents needed'")
+    value: str = Field(..., description="The fact itself")
+    severity: str = Field(default="info", description="info, warning or critical")
+
+
 class SimplificationResponse(BaseModel):
     """Response from simplification endpoint"""
     success: bool = Field(default=True, description="Whether simplification was successful")
@@ -50,6 +65,13 @@ class SimplificationResponse(BaseModel):
     sections: List[SimplificationSection] = Field(default_factory=list, description="Sections if text was chunked")
     preserved_facts: List[PreservedFact] = Field(default_factory=list, description="Critical facts and their preservation status")
     key_terms: List[str] = Field(default_factory=list, description="Important technical/legal terms preserved")
+    instant_summary: List[SummaryItem] = Field(
+        default_factory=list,
+        description=(
+            "Canonical Instant Summary. The website and the Chrome extension both "
+            "render this list, so they always show the same facts."
+        ),
+    )
     validation_passed: bool = Field(default=True, description="Whether fact preservation validation passed")
     validation_failures: List[str] = Field(default_factory=list, description="Any validation issues detected")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional processing metadata")

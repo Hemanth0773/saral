@@ -119,13 +119,42 @@ class TestFactsAreCompleteStatements:
             SCHOLARSHIP_PROCEDURE
         )
 
-        assert requirements
         for requirement in requirements:
             assert len(requirement.requirement) >= 20
             # A fragment such as "KYC-compliant" is not a requirement.
             assert not requirement.requirement.startswith("KYC-compliant")
             assert not requirement.requirement.startswith(",")
             assert requirement.requirement[0].isupper()
+
+    def test_an_eligibility_rule_is_reported_as_a_complete_statement(self):
+        """A rule about who qualifies is a requirement, not a procedure step."""
+        text = (
+            "1. ELIGIBILITY\n\n"
+            "The applicant must have secured at least 60% marks in the qualifying "
+            "examination and must be a citizen of India."
+        )
+        requirements = extraction_service.extract_eligibility_requirements(text)
+
+        assert requirements
+        assert requirements[0].requirement.startswith(
+            "The applicant must have secured at least 60% marks"
+        )
+        # The heading itself is not a requirement.
+        assert all("ELIGIBILITY" not in r.requirement for r in requirements)
+
+    def test_a_procedure_step_is_not_reported_as_an_eligibility_rule(self):
+        """A step of the procedure stays a step."""
+        text = (
+            "2. PROCEDURE\n\n"
+            "3. The applicant must complete every mandatory field before the final "
+            "submission."
+        )
+        requirements = extraction_service.extract_eligibility_requirements(text)
+        steps = extraction_service.extract_application_procedure(text)
+
+        assert not requirements
+        assert steps
+        assert "complete every mandatory field" in steps[0].description
 
     def test_conditions_are_complete(self):
         text = (
