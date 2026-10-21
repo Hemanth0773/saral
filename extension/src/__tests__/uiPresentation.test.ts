@@ -3,54 +3,36 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { formatReadingLevel } from '../../../shared/saral-ui/readability.ts';
-
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 function readSource(relativePath: string): string {
   return readFileSync(`${REPO_ROOT}${relativePath}`, 'utf8');
 }
 
+function readJson(relativePath: string): Record<string, unknown> {
+  return JSON.parse(readSource(relativePath));
+}
+
 // ============================================================
-// The reading level
+// The reading level label is gone
 // ============================================================
 
-test('a measured grade is shown', () => {
-  const label = formatReadingLevel({
-    simplified: { flesch_kincaid_grade: 5.2 },
-    target_grade_level: 5,
-  });
+test('the popup does not show a reading level', () => {
+  const summary = readSource('extension/src/popup/components/SummaryCard.tsx');
+  const app = readSource('extension/src/popup/App.tsx');
 
-  assert.equal(label, 'Reading level: Grade 5.2');
+  assert.equal(summary.includes('Reading level'), false);
+  assert.equal(summary.includes('gradeLabel'), false);
+  assert.equal(app.includes('formatReadingLevel'), false);
+  assert.equal(app.includes('gradeLabel'), false);
 });
 
-test('a grade below the target is reported honestly', () => {
-  const label = formatReadingLevel({
-    simplified: { flesch_kincaid_grade: 4.3 },
-    target_grade_level: 5,
-  });
+test('the website does not show a reading level', () => {
+  const website = readSource('frontend/src/components/TrySaralNow.tsx');
 
-  assert.equal(label, 'Reading level: Below Grade 5.0');
-});
-
-test('the target is never assumed to have been reached', () => {
-  const label = formatReadingLevel({
-    simplified: { flesch_kincaid_grade: 12.5 },
-    target_grade_level: 5,
-  });
-
-  assert.equal(label, 'Reading level: Grade 12.5');
-  assert.equal(label.includes('Below'), false);
-});
-
-test('no label is shown when the measurement is missing', () => {
-  assert.equal(formatReadingLevel(null), null);
-  assert.equal(formatReadingLevel(undefined), null);
-  assert.equal(formatReadingLevel({ simplified: null, target_grade_level: 5 }), null);
-  assert.equal(
-    formatReadingLevel({ simplified: { flesch_kincaid_grade: null }, target_grade_level: 5 }),
-    null,
-  );
+  assert.equal(website.includes('Reading level'), false);
+  assert.equal(website.includes('formatReadingLevel'), false);
+  assert.equal(website.includes('readingLevel'), false);
 });
 
 test('the popup does not show a placeholder grade', () => {
@@ -60,12 +42,12 @@ test('the popup does not show a placeholder grade', () => {
   assert.equal(source.includes('not measured'), false);
 });
 
-test('the popup and the website use the same label helper', () => {
-  const extension = readSource('extension/src/popup/App.tsx');
-  const website = readSource('frontend/src/components/TrySaralNow.tsx');
+test('the backend still measures the readability', () => {
+  // The measurement stays available in the API, it is simply not shown.
+  const source = readSource('backend/app/services/readability_service.py');
 
-  assert.ok(extension.includes('formatReadingLevel'));
-  assert.ok(website.includes('formatReadingLevel'));
+  assert.ok(source.includes('flesch_kincaid_grade'));
+  assert.ok(source.includes('flesch_reading_ease'));
 });
 
 // ============================================================
@@ -96,7 +78,7 @@ test('the output is not clipped away', () => {
 });
 
 // ============================================================
-// The colour swap
+// The outer corners
 // ============================================================
 
 test('the popup surface is yellow', () => {
@@ -104,6 +86,25 @@ test('the popup surface is yellow', () => {
 
   assert.ok(styles.includes('background-color: #f9c915'), 'the body must be yellow');
   assert.equal(styles.includes('background-color: #fbf8fc'), false);
+});
+
+test('the canvas behind the popup has its own background', () => {
+  const styles = readSource('extension/src/styles/index.css');
+
+  // Without a background on the html element the browser paints the body
+  // background over the whole window and the rounded corners are lost.
+  const htmlRule = styles.slice(styles.indexOf('html {'), styles.indexOf('body {'));
+  assert.ok(htmlRule.includes('background-color'), 'the html element needs its own background');
+});
+
+test('the popup surface and its content share one radius', () => {
+  const styles = readSource('extension/src/styles/index.css');
+  const app = readSource('extension/src/popup/App.tsx');
+
+  assert.ok(styles.includes('border-radius: 12px'));
+  assert.ok(app.includes('rounded-xl'), 'the popup container must be rounded');
+  // The content is clipped to the radius, so the header corners follow it.
+  assert.ok(app.includes('overflow-hidden'));
 });
 
 test('the cards are white', () => {
@@ -120,12 +121,62 @@ test('the cards are white', () => {
   assert.ok(hero.includes('bg-white'), 'the hero card must be white');
 });
 
-test('the outer corners are rounded', () => {
-  const styles = readSource('extension/src/styles/index.css');
-  const app = readSource('extension/src/popup/App.tsx');
+// ============================================================
+// The keyboard shortcut
+// ============================================================
 
-  assert.ok(styles.includes('border-radius: 12px'));
-  assert.ok(app.includes('rounded-xl'));
+test('the manifest registers the shortcut with the reserved action command', () => {
+  const manifest = readJson('extension/manifest.json');
+  const commands = manifest.commands as Record<string, { suggested_key?: { default?: string }; description?: string }>;
+
+  // "_execute_action" is handled by Chrome itself, which opens the popup
+  // reliably. A custom command relies on chrome.action.openPopup(), which
+  // Chrome only allows in some situations.
+  assert.ok(commands._execute_action, 'the reserved action command must be registered');
+  assert.equal(commands._execute_action.suggested_key?.default, 'Alt+S');
+  assert.equal(commands._execute_action.description, 'Open Saral on any page');
+});
+
+test('the footer advertises the shortcut that is registered', () => {
+  const footer = readSource('extension/src/popup/components/Footer.tsx');
+  const manifest = readJson('extension/manifest.json');
+  const commands = manifest.commands as Record<string, { suggested_key?: { default?: string } }>;
+
+  assert.ok(footer.includes('Alt+S'));
+  assert.equal(commands._execute_action.suggested_key?.default, 'Alt+S');
+});
+
+test('the service worker opens the popup for the fallback command', async () => {
+  const listeners: ((command: string) => void)[] = [];
+  let opened = 0;
+
+  const scope = globalThis as unknown as { chrome: unknown };
+  scope.chrome = {
+    commands: {
+      onCommand: {
+        addListener: (listener: (command: string) => void) => listeners.push(listener),
+      },
+    },
+    action: {
+      openPopup: async () => {
+        opened += 1;
+      },
+    },
+    runtime: {
+      onMessage: { addListener: () => undefined },
+    },
+  };
+
+  // A unique query string keeps this import out of the module cache.
+  await import(`../background/index.ts?shortcut-test=${Date.now()}`);
+
+  assert.equal(listeners.length, 1, 'the service worker must listen for commands');
+
+  listeners[0]('some-other-command');
+  assert.equal(opened, 0, 'another command must not open the popup');
+
+  listeners[0]('read-active-tab');
+  assert.equal(opened, 1, 'the fallback command must open the popup');
 });
 
 // ============================================================

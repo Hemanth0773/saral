@@ -24,12 +24,15 @@
     "service_worker": "background.js"
   },
   "commands": {
-    "read-active-tab": {
+    "_execute_action": {
       "suggested_key": {
         "default": "Alt+S",
         "mac": "Alt+S"
       },
-      "description": "Open Saral and read the active tab"
+      "description": "Open Saral on any page"
+    },
+    "read-active-tab": {
+      "description": "Open Saral and read the active tab (assign a shortcut in chrome://extensions/shortcuts)"
     }
   },
   "permissions": [

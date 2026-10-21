@@ -1,8 +1,8 @@
 # Project Status: Cognitive Accessibility Simplifier
 
 **Last Updated**: October 20, 2026  
-**Current Milestone**: Milestone 18 (Accuracy and completeness of the simplified output) - Complete  
-**Overall Completion**: ~100% (Milestones 1-19 complete, 546 backend tests + 117 extension tests passing)
+**Current Milestone**: Milestone 20 (Popup Corners, Reading Level Removal, Alt+S Shortcut) - Complete  
+**Overall Completion**: ~100% (Milestones 1-20 complete, 546 backend tests + 119 extension tests passing)
 
 ---
 
@@ -28,6 +28,7 @@
 - ✅ **Milestone 17 (One Canonical Output for Website and Extension)**: Complete - Backend builds the Instant Summary, shared Markdown parser, age direction preserved, completeness rule added, 26 new backend tests and 10 new extension tests passing
 - ✅ **Milestone 18 (Accuracy and Completeness of the Simplified Output)**: Complete - Age direction, negation, page markers, document vs account condition, heading-aware sections, "too similar" warning refined, 56 new backend regression tests on the complete notice
 - ✅ **Milestone 19 (Summary Quality, Readability and Extension Polish)**: Complete - Contextual percentages and amounts, fact ranking and de-duplication, measured reading level in both interfaces, one scroll surface, yellow popup with white cards, 30 new backend tests and 13 new extension tests passing
+- ✅ **Milestone 20 (Popup Corners, Reading Level Removal, Alt+S Shortcut)**: Complete - Rounded popup surface with a matching canvas, no reading level label in either interface, the shortcut uses Chrome's reserved action command, 2 new extension tests passing
 
 ### Architecture Diagram
 - System architecture diagram created: `docs/system-architecture.svg` and `docs/system-architecture.png`
@@ -35,7 +36,7 @@
 
 ### Key Metrics
 - **Backend Tests**: 546 passing (+1 skipped), 0 failing
-- **Extension Unit Tests**: 117 passing (node:test)
+- **Extension Unit Tests**: 119 passing (node:test)
 - **Extension Live Backend Checks**: 31 passing, 0 failing
 - **Test Coverage**: ~70% across all modules
 - **API Endpoints**: 16 (8 live-tested with HTTP requests in M12; 8 more exercised by the extension verification)
@@ -47,7 +48,76 @@
 - **M16 Verification**: extraction quality tested with 14 backend tests; Instant Summary and Markdown tested with 38 extension tests plus a live run of the reported scholarship notice and a headless rendering of the popup
 - **M17 Verification**: the canonical output tested with 26 backend tests and 10 extension tests; the website and the extension were rendered in a browser from the same API response and show the same facts
 - **M18 Verification**: the complete scholarship notice is a regression fixture (`backend/tests/fixtures/scholarship_terms.txt`) covered by 55 new backend tests; two live runs of the full document preserved all 27 checked requirements with `validation_passed: true` and no artefacts
-- **M19 Verification**: the summary shows contextual facts ("Reservation: 30% of slots will be reserved for the women candidates"), the age rule once, the negative rules as "Not eligible"; the reading level is measured and shown by both interfaces; the popup was rendered in a browser (yellow surface, white cards, one scroll surface)
+- **M19 Verification**: the summary shows contextual facts ("Reservation: 30% of slots will be reserved for the women candidates"), the age rule once, the negative rules as "Not eligible"; the popup was rendered in a browser (yellow surface, white cards, one scroll surface)
+- **M20 Verification**: Chrome's computed styles for the popup surface were read back over the DevTools protocol (canvas white, popup surface yellow with a 12px radius and `overflow: hidden`, the content clipped to the same radius, cards white with the hard black shadow); the rendered popup shows no reading level and exactly one scrollable element; the manifest registers Chrome's reserved `_execute_action` command with `Alt+S`
+---
+
+## Milestone 20 — Popup Corners, Reading Level Removal, Alt+S Shortcut
+
+**Status**: ✅ COMPLETE  
+**Date Completed**: October 21, 2026
+
+**Root Causes**
+
+1. **The outer corners looked sharp and uneven.** The `html` element had no
+   background of its own, so the browser painted the body's yellow background
+   over the whole window - the body's `border-radius` was never visible. The
+   sticky header inside the popup was also a square rectangle that painted over
+   the rounded container, so the top and bottom corners disagreed.
+2. **The Instant Summary showed `Reading level: Grade 11.8`.** The badge was
+   added in Milestone 19 and shown by both interfaces.
+3. **`Alt+S` did nothing.** The shortcut was a *custom* command
+   (`read-active-tab`) whose handler called `chrome.action.openPopup()`. Chrome
+   only allows that call from a user gesture, and a command handler in the
+   service worker is not one, so the call was rejected every time. Chrome's
+   reserved `_execute_action` command is the supported way to open an
+   extension's popup from a keyboard shortcut.
+
+**What Changed**
+
+| File | Change |
+| --- | --- |
+| `extension/src/styles/index.css` | The `html` element gets its own background so the rounded yellow surface is actually visible. |
+| `extension/src/popup/App.tsx` | The popup container is clipped to its radius, so the header follows the same curve. |
+| `extension/src/popup/components/SummaryCard.tsx`, `App.tsx` | The reading level badge and its logic are gone. |
+| `frontend/src/components/TrySaralNow.tsx` | The website no longer shows a reading level either. |
+| `shared/saral-ui/readability.ts` | Deleted - nothing uses it any more. The backend still measures the readability and returns it in the API. |
+| `extension/manifest.json` | `Alt+S` is now registered as Chrome's reserved `_execute_action` command, plus a `read-active-tab` command for anyone who wants to assign their own key. |
+| `extension/src/background/index.ts` | The fallback handler is documented; it only serves the manually assigned command. |
+| `extension/src/__tests__/uiPresentation.test.ts` | Tests for the removed label, the rounded surface, the shortcut registration and its handler. |
+
+**Verification in Chrome**
+
+Chrome's own computed styles for the popup document, read back over the
+DevTools protocol:
+
+```
+htmlBackground: rgb(255, 255, 255)     the canvas behind the popup
+bodyBackground: rgb(249, 201, 21)       the yellow popup surface
+bodyRadius:    12px                    the rounded surface
+bodyOverflow:  hidden                  the content is clipped to it
+appRadius:     12px                    the container matches
+appOverflow:   hidden                  the header follows the curve
+cardBackground: rgb(255, 255, 255)     the cards are white
+cardRadius:    12px
+cardShadow:    rgb(13, 13, 13) 4px 4px 0px 0px   the hard black shadow
+hasReadingLevel: False
+```
+
+The rendered popup reports **one** scrollable element
+(`main.scroll-area.flex-1`), and the Instant Summary starts directly with
+"Age requirement: Below 30 years" and "Reservation: 30% of slots will be
+reserved for the women candidates".
+
+**Known Limitations (Honest)**
+
+- Chrome 155 in this environment ignores the `--load-extension` switch, so
+  the extension could not be loaded into the automated Chrome. The popup
+  document was verified by serving the built folder and reading the styles
+  Chrome computed; the keyboard shortcut itself has to be confirmed by a
+  person pressing `Alt+S` after reloading the extension.
+- The rounding of the popup window frame itself is Chrome's own; the yellow
+  surface inside it is rounded, and the window's own corners stay square.
 
 ---
 
@@ -606,7 +676,7 @@ The same request previously failed outright with a 503.
 
 **Test Results**
 - Backend: **346 passing, 1 skipped, 0 failing** (was 338 — the 8 new CORS tests, no regressions)
-- Extension Unit Tests: **50 passing** (config, extractor, facts, errors, api client)
+- Extension Unit Tests: **119 passing** (config, extractor, facts, errors, api client, markdown, canonical output, UI presentation)
 - Extension live backend checks: **31 passing, 0 failing** (health + CORS, simplify, extract-info, readability, translate en→kn, TTS + audio fetch, error handling)
 - Extension typecheck (`tsc --noEmit`, strict): clean
 - Extension lint (`oxlint`): clean
@@ -1218,7 +1288,7 @@ Key variables:
 
 ### Test Coverage
 - **546/546 backend tests passing** (100%, 1 skipped)
-- **50/50 extension unit tests passing**
+- **119/119 extension unit tests passing**
 - **31/31 extension live backend checks passing**
 - **Zero regressions** from M1-M12
 - **~70% code coverage** overall (pytest-cov)

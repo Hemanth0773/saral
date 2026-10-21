@@ -4,7 +4,7 @@ import type { LanguageOption, UnavailableLanguageOption } from '../../shared/con
 import AudioDeck from './AudioDeck';
 import FactList from './FactList';
 import Markdown from './Markdown';
-import { CheckCircleIcon, CheckIcon, CopyIcon, WarningIcon } from './Icons';
+import { CheckIcon, CopyIcon, WarningIcon } from './Icons';
 
 type SummaryCardProps = {
   simplifiedText: string;
@@ -12,7 +12,6 @@ type SummaryCardProps = {
   translatedLanguageLabel: string | null;
   facts: FactItem[];
   hiddenFacts?: number;
-  gradeLabel: string | null;
   validationPassed: boolean;
   validationFailures: string[];
   modelUsed: string;
@@ -36,7 +35,6 @@ export default function SummaryCard({
   translatedLanguageLabel,
   facts,
   hiddenFacts = 0,
-  gradeLabel,
   validationPassed,
   validationFailures,
   modelUsed,
@@ -68,13 +66,6 @@ export default function SummaryCard({
             Instant Summary
           </h2>
         </div>
-
-        {gradeLabel ? (
-          <span className="brutal-pill-sm inline-flex items-center gap-1 bg-white px-2 py-0.5">
-            <CheckCircleIcon className="text-[13px] text-saral-ink" aria-hidden="true" />
-            <span className="text-[10px] font-extrabold text-saral-ink">{gradeLabel}</span>
-          </span>
-        ) : null}
       </div>
 
       {/* ---- Important facts ---- */}

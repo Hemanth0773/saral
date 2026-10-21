@@ -15,6 +15,15 @@
     max-height: 600px;
   }
 
+  html {
+    /*
+     * The canvas behind the popup. Without a background of its own the
+     * browser would paint the body background over the whole window, and the
+     * rounded corners of the popup surface would never be seen.
+     */
+    background-color: #ffffff;
+  }
+
   body {
     margin: 0;
     /* The popup surface is yellow; the cards on it are white. */

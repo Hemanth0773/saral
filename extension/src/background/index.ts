@@ -235,7 +235,17 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
-// Alt+S opens the popup so the user can immediately read the active tab.
+/*
+ * Keyboard shortcut.
+ *
+ * The advertised Alt+S uses Chrome's reserved "_execute_action" command
+ * (see manifest.json). Chrome handles that itself, so it opens the popup
+ * natively and reliably, exactly like clicking the toolbar icon.
+ *
+ * The "read-active-tab" command is a fallback: a user can assign a shortcut
+ * to it in chrome://extensions/shortcuts, and the service worker then opens
+ * the popup programmatically.
+ */
 if (chrome.commands && typeof chrome.action?.openPopup === 'function') {
   chrome.commands.onCommand.addListener((command) => {
     if (command !== 'read-active-tab') return;

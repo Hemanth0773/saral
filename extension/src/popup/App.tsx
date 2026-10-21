@@ -23,7 +23,6 @@ import {
 } from '../shared/config';
 import { describeError, toSaralError } from '../shared/errors';
 import { buildFactSummary, toFactItem } from '../shared/facts';
-import { formatReadingLevel } from '@saral-ui/readability';
 import type {
   ExtractionResponse,
   SimplificationResponse,
@@ -387,11 +386,6 @@ export default function App() {
     return buildFactSummary(structured?.structured_information, simplification?.preserved_facts);
   }, [simplification, structured]);
 
-  const gradeLabel = useMemo(
-    () => formatReadingLevel(simplification?.readability, TARGET_GRADE_LEVEL),
-    [simplification],
-  );
-
   const audioUrl = useMemo(() => (tts ? joinUrl(baseUrl, tts.audio_url) : null), [baseUrl, tts]);
 
   const hiddenFacts = useMemo(() => {
@@ -404,7 +398,7 @@ export default function App() {
   const canReadAloud = Boolean(simplification) && !isTtsLoading;
 
   return (
-      <div className="relative flex h-full max-h-[600px] w-[400px] flex-col rounded-xl bg-saral-yellow">
+      <div className="relative flex h-full max-h-[600px] w-[400px] flex-col overflow-hidden rounded-xl bg-saral-yellow">
       <Header onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <main className="scroll-area flex-1 overflow-y-auto px-3 pb-3 pt-3">
@@ -468,7 +462,6 @@ export default function App() {
               }
               facts={factSummary.facts}
               hiddenFacts={hiddenFacts}
-              gradeLabel={gradeLabel}
               validationPassed={simplification.validation_passed}
               validationFailures={simplification.validation_failures}
               modelUsed={simplification.model_used}
