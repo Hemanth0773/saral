@@ -395,6 +395,65 @@ def detect_unsupported_number_issues(original_text: str, simplified_text: str) -
 # Entry point
 # ---------------------------------------------------------------------
 
+def _content_words(text: str) -> List[str]:
+    """The words of a rule that carry its meaning."""
+    stop_words = {
+        "the", "and", "for", "that", "this", "with", "from", "have", "has", "had",
+        "are", "was", "were", "been", "being", "will", "shall", "must", "may",
+        "can", "not", "any", "all", "his", "her", "its", "their", "who", "which",
+        "when", "where", "while", "such", "only", "also", "than", "then", "them",
+        "they", "you", "your", "our", "per", "via", "under", "upon", "into", "out",
+        "does", "did", "each", "other", "more", "most", "same", "one", "two",
+        "there", "here", "what", "how", "his", "her", "its", "he", "she",
+    }
+    words = re.findall(r"[a-z0-9%]+", text.lower())
+    return [word for word in words if len(word) > 2 and word not in stop_words]
+
+
+def detect_missing_rules(original_text: str, simplified_text: str) -> List[str]:
+    """
+    Finds rules of the source that do not appear in the simplified text.
+
+    A model that rewrites a document can quietly leave a rule out. Every rule
+    has words that only it uses - "acquired", "AISHE", "nodal" - and those
+    have to survive the rewrite. A rule that is only reworded keeps them, so
+    a paraphrase is not reported - only a rule whose content is really gone.
+    """
+    if not original_text or not simplified_text:
+        return []
+
+    from app.services.extraction_service import (
+        extract_eligibility_requirements,
+        extract_important_conditions,
+    )
+
+    rules = [
+        rule.requirement for rule in extract_eligibility_requirements(original_text)
+    ] + [condition.condition for condition in extract_important_conditions(original_text)]
+
+    if not rules:
+        return []
+
+    simplified_lower = simplified_text.lower()
+    missing: List[str] = []
+
+    for rule in rules:
+        words = _content_words(rule)
+        if len(words) < 4:
+            continue
+        present = sum(1 for word in words if word in simplified_lower)
+        # A rule is only reported when almost none of its content survived.
+        # A reworded rule keeps most of its words, so a paraphrase is not
+        # reported - only a rule that is really gone.
+        if present * 10 < len(words) * 4:
+            missing.append(
+                f"A rule from the source seems to be missing from the simplified text: "
+                f"{rule[:160]}"
+            )
+
+    return missing[:3]
+
+
 def validate_fidelity(original_text: str, simplified_text: str) -> List[str]:
     """
     Runs every fidelity check and returns the issues found.
@@ -407,6 +466,7 @@ def validate_fidelity(original_text: str, simplified_text: str) -> List[str]:
     issues.extend(detect_certainty_issues(original_text, simplified_text))
     issues.extend(detect_entity_issues(original_text, simplified_text))
     issues.extend(detect_unsupported_number_issues(original_text, simplified_text))
+    issues.extend(detect_missing_rules(original_text, simplified_text))
 
     # Keep the report readable when the same problem repeats.
     unique: List[str] = []

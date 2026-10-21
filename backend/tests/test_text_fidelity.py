@@ -45,8 +45,8 @@ Page 4 of 7
 BAD_SIMPLIFIED = """You can apply if you are studying at a school and you got at least 60% marks. Your family income must not be more than Rs. 2,50,000. You must declare on Page 4 of 7 of your application if you already get a scholarship or fellowship. The list of shortlisted candidates will be announced in November/December on the portal. You must upload a scanned copy of the marksheet, the bank passbook and the income certificate. The institution must verify the documents.
 """
 
-# A simplification that keeps the meaning of the source.
-GOOD_SIMPLIFIED = """You can apply if you are studying at a university, college or institute and you got at least 60% marks. Your family income must not be more than Rs. 2,50,000. If you already get a scholarship or fellowship, you can still apply, but you must declare it in your application. The list of shortlisted candidates will normally be announced in November/December on the National Scholarship Portal. You must upload a scanned copy of the marksheet, the bank passbook and the income certificate. The institution must verify the documents.
+# A simplification that keeps the meaning of every rule of the source.
+GOOD_SIMPLIFIED = """You can apply if you are studying at a university, college or institute and you got at least 60% marks. Your family income must not be more than Rs. 2,50,000. For students in the final year of a professional course, the income of the guardian is considered. If you already get a scholarship or fellowship, you can still apply, but you must declare it in your application. The selection committee will shortlist the applications, and the list of shortlisted candidates will normally be announced in November/December on the National Scholarship Portal. You must upload a scanned copy of the marksheet, the bank passbook and the income certificate. The institution must verify the documents before the final submission is made. You must not be in receipt of any other benefit under a scheme of the Central Government.
 """
 
 
@@ -315,6 +315,38 @@ class TestFinalResponseValidation:
 
         assert validated["validation_passed"] is True
         assert validated["validation_failures"] == []
+
+    def test_a_rule_that_is_missing_from_the_output_is_reported(self):
+        """A model that quietly leaves a rule out is reported."""
+        simplified = (
+            "You can apply if you are studying at a university, college or institute "
+            "and you got at least 60% marks."
+        )
+
+        issues = text_fidelity.detect_missing_rules(SCHOLARSHIP_NOTICE, simplified)
+
+        assert issues
+        assert "missing" in issues[0].lower()
+
+    def test_a_paraphrased_rule_is_not_reported(self):
+        """A rule that is only reworded is still there."""
+        simplified = GOOD_SIMPLIFIED.replace(
+            "You must not be in receipt of any other benefit under a scheme of the Central Government.",
+            "You must not get any other benefit from a scheme of the Central Government.",
+        )
+
+        issues = text_fidelity.detect_missing_rules(SCHOLARSHIP_NOTICE, simplified)
+
+        assert issues == []
+
+    def test_a_missing_rule_makes_the_validation_fail(self):
+        validated = validation_service.validate_final_response(
+            self._response("Only the first paragraph of the document was simplified.")
+        )
+
+        assert validated["validation_passed"] is False
+        failures = " ".join(validated["validation_failures"])
+        assert "missing" in failures.lower()
 
     def test_the_endpoint_reports_the_failure(self):
         from fastapi.testclient import TestClient

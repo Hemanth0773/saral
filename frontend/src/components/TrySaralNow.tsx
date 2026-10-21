@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { API_BASE_URL, extractDocumentUrl, simplifyDocument, type DocumentExtractionResponse, type SimplificationResponse } from '../services/api';
+import { formatReadingLevel } from '@saral-ui/readability';
 import InstantSummary from './InstantSummary';
 import SimplifiedMarkdown from './SimplifiedMarkdown';
 
@@ -47,6 +48,12 @@ export default function TrySaralNow({ sampleUrl, samplePulse, onSimplificationCo
   const [error, setError] = useState<string | null>(null);
   const [extractionResult, setExtractionResult] = useState<DocumentExtractionResponse | null>(null);
   const [simplificationResult, setSimplificationResult] = useState<SimplificationResponse | null>(null);
+  // The backend measures the readability together with the simplification, so
+  // the website and the extension show the same result.
+  const readingLevel = useMemo(
+    () => formatReadingLevel(simplificationResult?.readability),
+    [simplificationResult],
+  );
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragCounterRef = useRef(0);
@@ -342,6 +349,11 @@ export default function TrySaralNow({ sampleUrl, samplePulse, onSimplificationCo
               <p className="text-sm font-medium text-neutral-800 leading-relaxed">
                 Simplified to Grade {simplificationResult.target_grade_level} · {simplificationResult.model_used} · {simplificationResult.processing_time_ms}ms
               </p>
+              {readingLevel && (
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full border-2 border-neutral-900 bg-white px-2.5 py-1 text-[11px] font-extrabold text-neutral-900">
+                  {readingLevel}
+                </span>
+              )}
               <div className="mt-3">
                 <p className="mb-1.5 flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-neutral-800">
                   <span className="w-2.5 h-2.5 bg-black rounded-full"></span>

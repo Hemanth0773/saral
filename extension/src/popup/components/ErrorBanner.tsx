@@ -10,8 +10,8 @@ type ErrorBannerProps = {
 };
 
 const TONE_STYLES = {
-  error: 'bg-red-50 text-red-900 border-red-700',
-  info: 'bg-saral-lavender text-saral-ink border-saral-ink',
+  error: 'bg-white text-red-900 border-red-700',
+  info: 'bg-white text-saral-ink border-saral-ink',
 } as const;
 
 export default function ErrorBanner({

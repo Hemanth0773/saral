@@ -64,7 +64,7 @@ export default function InputCard({
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
         className={`flex flex-col items-center justify-center rounded-lg p-2.5 text-center transition-colors ${
-          isDragging ? 'bg-saral-yellow/40' : 'bg-saral-lavender hover:bg-saral-lavenderHigh'
+          isDragging ? 'bg-saral-yellow/40' : 'bg-white hover:bg-neutral-100'
         }`}
       >
         <input
@@ -124,7 +124,7 @@ export default function InputCard({
             spellCheck={false}
             aria-describedby="saral-text-meta"
             placeholder="Paste complex circular text, gazette excerpt, or portal URL..."
-            className="scroll-area w-full resize-none rounded-lg bg-saral-lavender p-2.5 pr-9 text-[12px] font-medium text-saral-ink placeholder:text-saral-ink/40 focus:outline-none focus:bg-white focus:shadow-[2px_2px_0_0_#0D0D0D]"
+            className="scroll-area w-full resize-none rounded-lg border-2 border-saral-ink bg-white p-2.5 pr-9 text-[12px] font-medium text-saral-ink placeholder:text-saral-ink/40 focus:outline-none focus:shadow-[2px_2px_0_0_#0D0D0D]"
           />
           {value ? (
             <button
@@ -148,7 +148,7 @@ export default function InputCard({
             type="button"
             onClick={onReadActiveTab}
             disabled={isReading}
-            className="btn-tactile brutal-pill-sm inline-flex items-center gap-1 bg-saral-lavenderHigh px-2.5 py-1 text-[11px] font-bold text-saral-ink disabled:opacity-50"
+            className="btn-tactile brutal-pill-sm inline-flex items-center gap-1 bg-white px-2.5 py-1 text-[11px] font-bold text-saral-ink disabled:opacity-50"
           >
             {isReading ? (
               <SpinnerIcon className="text-[14px] text-saral-ink" />
@@ -170,7 +170,7 @@ export default function InputCard({
         </div>
 
         {sourceNote ? (
-          <p className="rounded-md bg-saral-lavender px-2 py-1 text-[10px] font-semibold text-saral-ink/70">
+          <p className="rounded-md bg-white px-2 py-1 text-[10px] font-semibold text-saral-ink/70 shadow-[2px_2px_0_0_#0D0D0D]">
             {sourceNote}
           </p>
         ) : null}

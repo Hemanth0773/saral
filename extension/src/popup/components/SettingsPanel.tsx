@@ -87,7 +87,7 @@ export default function SettingsPanel({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder={DEFAULT_BASE_URL}
-          className="mt-1 w-full rounded-lg border-2 border-saral-ink/25 bg-saral-lavender px-2.5 py-2 text-[12px] font-medium text-saral-ink focus:outline-none focus:border-saral-ink focus:bg-white"
+          className="mt-1 w-full rounded-lg border-2 border-saral-ink/40 bg-white px-2.5 py-2 text-[12px] font-medium text-saral-ink focus:outline-none focus:border-saral-ink"
         />
         <p className="mt-1 text-[10px] font-semibold text-saral-ink/55">
           Saral sends the text you approve to this address. Nothing is sent automatically.
@@ -111,7 +111,7 @@ export default function SettingsPanel({
           <button
             type="button"
             onClick={onClose}
-            className="brutal-pill-sm bg-saral-lavenderHigh px-3 py-1 text-[11px] font-extrabold text-saral-ink"
+            className="brutal-pill-sm bg-white px-3 py-1 text-[11px] font-extrabold text-saral-ink"
           >
             Cancel
           </button>

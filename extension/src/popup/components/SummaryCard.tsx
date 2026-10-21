@@ -61,7 +61,7 @@ export default function SummaryCard({
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <span
-            className="h-2.5 w-2.5 rounded-full bg-saral-yellow shadow-[1px_1px_0_0_#0D0D0D]"
+            className="h-2.5 w-2.5 rounded-full bg-saral-ink shadow-[1px_1px_0_0_#0D0D0D]"
             aria-hidden="true"
           />
           <h2 className="text-[12px] font-extrabold uppercase tracking-wider text-saral-ink">
@@ -70,26 +70,25 @@ export default function SummaryCard({
         </div>
 
         {gradeLabel ? (
-          <span className="brutal-pill-sm inline-flex items-center gap-1 bg-saral-lavenderHigh px-2 py-0.5">
+          <span className="brutal-pill-sm inline-flex items-center gap-1 bg-white px-2 py-0.5">
             <CheckCircleIcon className="text-[13px] text-saral-ink" aria-hidden="true" />
             <span className="text-[10px] font-extrabold text-saral-ink">{gradeLabel}</span>
           </span>
-        ) : (
-          <span className="brutal-pill-sm inline-flex items-center gap-1 bg-saral-lavender px-2 py-0.5">
-            <span className="text-[10px] font-bold text-saral-ink/70">Grade not measured</span>
-          </span>
-        )}
+        ) : null}
       </div>
 
       {/* ---- Important facts ---- */}
       <FactList facts={facts} hidden={hiddenFacts} />
 
       {/* ---- Simplified text ---- */}
-      <div className="rounded-lg border-2 border-saral-ink/15 bg-saral-lavender p-2.5">
+      {/* The popup scrolls as one surface, so the text is not a second
+          scroll area. The collapsed state is a preview; the button reveals
+          the rest. */}
+      <div className="rounded-lg border-2 border-saral-ink/15 bg-white p-2.5">
         <Markdown
           text={simplifiedText}
           className={`text-[12px] font-medium leading-relaxed text-saral-ink ${
-            isExpanded ? '' : 'scroll-area max-h-[170px] overflow-y-auto'
+            isExpanded ? '' : 'max-h-[170px] overflow-hidden'
           }`}
         />
         {simplifiedText.length > 420 ? (
@@ -111,7 +110,7 @@ export default function SummaryCard({
           </p>
           <Markdown
             text={translatedText}
-            className="scroll-area max-h-[140px] overflow-y-auto text-[12px] font-medium leading-relaxed text-saral-ink"
+            className="text-[12px] font-medium leading-relaxed text-saral-ink"
           />
         </div>
       ) : null}
@@ -139,7 +138,7 @@ export default function SummaryCard({
                 className={`brutal-pill-sm px-2.5 py-1 text-[10px] font-bold ${
                   isActive
                     ? 'bg-saral-yellow text-saral-ink font-extrabold'
-                    : 'bg-saral-lavenderHigh text-saral-ink hover:bg-saral-lavenderHighest'
+                    : 'bg-white text-saral-ink hover:bg-neutral-100'
                 }`}
               >
                 {language.native}
@@ -154,7 +153,7 @@ export default function SummaryCard({
               disabled
               aria-disabled="true"
               title={language.reason}
-              className="brutal-pill-sm cursor-not-allowed bg-saral-lavender px-2.5 py-1 text-[10px] font-bold text-saral-ink/40 line-through"
+              className="brutal-pill-sm cursor-not-allowed bg-white px-2.5 py-1 text-[10px] font-bold text-saral-ink/40 line-through"
             >
               {language.native}
               <span className="ml-1 no-underline">Unavailable</span>

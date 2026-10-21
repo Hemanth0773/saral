@@ -6,13 +6,13 @@ type HeaderProps = {
 
 export default function Header({ onOpenSettings }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-30 border-b border-black/10 bg-saral-surface/95 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-black/10 bg-saral-yellow/95 backdrop-blur">
       <div className="flex h-14 items-center justify-between px-4">
         <div className="flex items-center gap-1.5">
           <span className="select-none text-lg font-extrabold tracking-tight text-saral-ink">
             Saral
           </span>
-          <span className="inline-block h-2 w-2 rounded-full bg-saral-yellow" aria-hidden="true" />
+          <span className="inline-block h-2 w-2 rounded-full bg-saral-ink" aria-hidden="true" />
           <span className="sr-only">Browser Copilot</span>
         </div>
         <button

@@ -99,6 +99,25 @@ export type InstantSummaryItem = {
   severity: string;
 };
 
+export type ReadabilitySummary = {
+  original: {
+    word_count: number;
+    sentence_count: number;
+    average_sentence_length: number;
+    flesch_reading_ease: number | null;
+    flesch_kincaid_grade: number | null;
+  };
+  simplified: {
+    word_count: number;
+    sentence_count: number;
+    average_sentence_length: number;
+    flesch_reading_ease: number | null;
+    flesch_kincaid_grade: number | null;
+  };
+  target_grade_level: number;
+  target_achieved: boolean;
+};
+
 export type SimplificationResponse = {
   success: boolean;
   document_id: string;
@@ -125,6 +144,8 @@ export type SimplificationResponse = {
    * renders the same list, so both interfaces show the same facts.
    */
   instant_summary: InstantSummaryItem[];
+  /** The measured readability of the result, measured by the backend. */
+  readability?: ReadabilitySummary | null;
   validation_passed: boolean;
   validation_failures: string[];
   metadata: Record<string, unknown>;

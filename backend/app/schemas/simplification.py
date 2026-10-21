@@ -38,6 +38,23 @@ class SimplificationRequest(BaseModel):
         }
 
 
+class ReadabilityMetrics(BaseModel):
+    """Readability metrics of one text"""
+    word_count: int = Field(default=0, description="Number of words")
+    sentence_count: int = Field(default=0, description="Number of sentences")
+    average_sentence_length: float = Field(default=0.0, description="Words per sentence")
+    flesch_reading_ease: Optional[float] = Field(None, description="Flesch reading ease (0-100)")
+    flesch_kincaid_grade: Optional[float] = Field(None, description="Flesch-Kincaid grade level")
+
+
+class ReadabilitySummary(BaseModel):
+    """The measured readability of a simplified document"""
+    original: ReadabilityMetrics = Field(default_factory=ReadabilityMetrics)
+    simplified: ReadabilityMetrics = Field(default_factory=ReadabilityMetrics)
+    target_grade_level: int = Field(default=5, description="The grade level that was asked for")
+    target_achieved: bool = Field(default=False, description="Whether the target grade level was reached")
+
+
 class SummaryItem(BaseModel):
     """One fact of the canonical Instant Summary"""
     id: str = Field(..., description="Stable identifier for the item")
@@ -70,6 +87,13 @@ class SimplificationResponse(BaseModel):
         description=(
             "Canonical Instant Summary. The website and the Chrome extension both "
             "render this list, so they always show the same facts."
+        ),
+    )
+    readability: Optional[ReadabilitySummary] = Field(
+        None,
+        description=(
+            "The measured readability of the simplified text. The website and the "
+            "Chrome extension both show this result."
         ),
     )
     validation_passed: bool = Field(default=True, description="Whether fact preservation validation passed")

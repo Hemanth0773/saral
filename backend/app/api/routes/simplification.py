@@ -11,7 +11,7 @@ from app.core.logging import get_logger
 from app.schemas.simplification import SimplificationRequest, SimplificationResponse
 from app.schemas.document import ErrorResponse
 from app.services import llm_service, validation_service
-from app.services import extraction_service, summary_service
+from app.services import extraction_service, readability_service, summary_service
 from app.services.document_service import generate_document_id
 
 logger = get_logger(__name__)
@@ -200,6 +200,25 @@ async def simplify_document(request: SimplificationRequest) -> dict:
 
         # Validate fact preservation
         response_data = validation_service.validate_final_response(response_data)
+
+        # Measure the readability of the result, so the website and the
+        # extension can show the same measured result.
+        try:
+            measured = readability_service.compare_readability(
+                original_text=request.text,
+                simplified_text=response_data.get("simplified_text", ""),
+                target_grade_level=request.target_grade_level,
+            )
+            response_data["readability"] = {
+                "original": measured["original"],
+                "simplified": measured["simplified"],
+                "target_grade_level": measured["comparison"]["target_grade_level"],
+                "target_achieved": measured["comparison"]["target_achieved"],
+            }
+        except Exception as readability_error:
+            # A missing measurement must not fail the simplification.
+            logger.warning(f"Could not measure readability: {str(readability_error)}")
+            response_data["readability"] = None
 
         # Build the canonical Instant Summary. The website and the Chrome
         # extension render this same list, so the two interfaces cannot show

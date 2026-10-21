@@ -2,7 +2,7 @@
 
 **Last Updated**: October 20, 2026  
 **Current Milestone**: Milestone 18 (Accuracy and completeness of the simplified output) - Complete  
-**Overall Completion**: ~100% (Milestones 1-18 complete, 457 backend tests + 104 extension tests passing)
+**Overall Completion**: ~100% (Milestones 1-19 complete, 546 backend tests + 117 extension tests passing)
 
 ---
 
@@ -27,14 +27,15 @@
 - ✅ **Milestone 16 (Instant Summary Quality and Markdown Rendering)**: Complete - Extraction returns complete statements, headings and page markers excluded, safe Markdown renderer, 14 new backend tests and 38 new extension tests passing
 - ✅ **Milestone 17 (One Canonical Output for Website and Extension)**: Complete - Backend builds the Instant Summary, shared Markdown parser, age direction preserved, completeness rule added, 26 new backend tests and 10 new extension tests passing
 - ✅ **Milestone 18 (Accuracy and Completeness of the Simplified Output)**: Complete - Age direction, negation, page markers, document vs account condition, heading-aware sections, "too similar" warning refined, 56 new backend regression tests on the complete notice
+- ✅ **Milestone 19 (Summary Quality, Readability and Extension Polish)**: Complete - Contextual percentages and amounts, fact ranking and de-duplication, measured reading level in both interfaces, one scroll surface, yellow popup with white cards, 30 new backend tests and 13 new extension tests passing
 
 ### Architecture Diagram
 - System architecture diagram created: `docs/system-architecture.svg` and `docs/system-architecture.png`
 - Shows 5-layer architecture: Client (React 19), API Gateway (FastAPI), Service Layer (NLP/AI modules), Data Layer (PostgreSQL + File Storage), External APIs (Hugging Face, Microsoft Edge TTS, Tesseract)
 
 ### Key Metrics
-- **Backend Tests**: 457 passing (+1 skipped), 0 failing
-- **Extension Unit Tests**: 104 passing (node:test)
+- **Backend Tests**: 546 passing (+1 skipped), 0 failing
+- **Extension Unit Tests**: 117 passing (node:test)
 - **Extension Live Backend Checks**: 31 passing, 0 failing
 - **Test Coverage**: ~70% across all modules
 - **API Endpoints**: 16 (8 live-tested with HTTP requests in M12; 8 more exercised by the extension verification)
@@ -46,6 +47,69 @@
 - **M16 Verification**: extraction quality tested with 14 backend tests; Instant Summary and Markdown tested with 38 extension tests plus a live run of the reported scholarship notice and a headless rendering of the popup
 - **M17 Verification**: the canonical output tested with 26 backend tests and 10 extension tests; the website and the extension were rendered in a browser from the same API response and show the same facts
 - **M18 Verification**: the complete scholarship notice is a regression fixture (`backend/tests/fixtures/scholarship_terms.txt`) covered by 55 new backend tests; two live runs of the full document preserved all 27 checked requirements with `validation_passed: true` and no artefacts
+- **M19 Verification**: the summary shows contextual facts ("Reservation: 30% of slots will be reserved for the women candidates"), the age rule once, the negative rules as "Not eligible"; the reading level is measured and shown by both interfaces; the popup was rendered in a browser (yellow surface, white cards, one scroll surface)
+
+---
+
+## Milestone 19 — Summary Quality, Readability and Extension Polish
+
+**Status**: ✅ COMPLETE  
+**Date Completed**: October 21, 2026
+
+**Root Causes (confirmed by reproducing the reported output)**
+
+1. **`Percentage: 30%` with no meaning.** `extract_percentages` kept only the
+   number and derived a purpose from three hard coded words, so a percentage
+   without one of them lost its meaning entirely.
+2. **The age rule shown twice.** The eligibility rule "Only students who are
+   below the age of 30 years ... are eligible" repeated the age requirement,
+   and nothing recognised it as a restatement.
+3. **Important conditions pushed out.** The summary was built in extraction
+   order and then cut at the limit, so a generic fact could hide the rule that
+   a student may take only one scholarship.
+4. **"+25 more facts".** The count included duplicates, restatements and list
+   introductions, because the facts were never de-duplicated as a set.
+5. **`Grade not measured`.** `textstat` raises a `KeyError` for a word that is
+   not in its CMU dictionary ("postgraduate", "2"), which made both Flesch
+   scores `None` for almost every real document. The extension then showed a
+   placeholder because the measurement had never succeeded.
+6. **Double scrolling.** The summary card had its own `overflow-y-auto` inside
+   the scrolling `<main>`.
+7. **The popup was lavender with white cards.** The request was for a yellow
+   surface with white cards.
+
+**What Changed**
+
+| File | Change |
+| --- | --- |
+| `backend/app/services/readability_service.py` | The syllables are counted word by word with an estimate for unknown words, and the Flesch scores are calculated with the same formula when textstat cannot. |
+| `backend/app/api/routes/simplification.py` | The simplification response now carries the measured `readability`. |
+| `backend/app/schemas/simplification.py` | The `readability` field and its models. |
+| `backend/app/services/extraction_service.py` | A percentage and an amount keep the clause they sit in, so their meaning survives. |
+| `backend/app/services/summary_service.py` | Contextual labels for percentages and amounts, ranking by importance, de-duplication of restatements and of two wordings of the same rule, and an honest hidden count. |
+| `shared/saral-ui/readability.ts` | **New.** The reading level label, used by both interfaces. |
+| `extension/src/popup/App.tsx`, `SummaryCard.tsx` | The reading level comes from the simplification; the placeholder is gone; one scroll surface; the colour swap. |
+| `frontend/src/components/TrySaralNow.tsx` | The website shows the same reading level. |
+
+**Test Results**
+
+- Backend: **546 passing, 1 skipped, 0 failing** (was 513; +33)
+- Extension: **117 passing** (was 104; +13), typecheck and lint clean, build and
+  `verify:dist` clean
+- Website: typecheck and build clean, lint unchanged at 6 pre-existing warnings
+- Live: `verify:backend` 31 checks passed; the full notice was simplified
+  live and checked section by section (0 of 27 missing, no artefacts)
+
+**Known Limitations (Honest)**
+
+- The reading level of a technical legal text is often far above the target.
+  The label reports the measured value, it does not improve it.
+- The summary shows twelve facts. The rest are counted, not hidden silently,
+  and they stay in the detailed text.
+- The fact ranking uses keyword hints. An unusual but important rule could
+  still be ranked lower than a rule that matches a hint.
+- The popup was rendered in a headless browser, not in a real Chrome
+  extension window.
 
 ---
 
@@ -112,7 +176,7 @@ ok  UGC website
 
 **Test Results**
 
-- Backend: **513 passing, 1 skipped, 0 failing** (was 457; +56 regression tests)
+- Backend: **546 passing, 1 skipped, 0 failing** (was 457; +56 regression tests)
 - Extension: **104 passing** (unchanged), typecheck and lint clean, build and
   `verify:dist` clean
 - Website: typecheck and build clean, lint unchanged at 6 pre-existing warnings
@@ -990,7 +1054,7 @@ Extracted:
 
 ## Test Execution (as of 2026-10-20)
 ```
-Total Backend Tests: 457
+Total Backend Tests: 546
 Passing: 457 ✅
 Failing: 0 ❌
 Skipped: 1 (a local origin that is not on the configured CORS allow-list)
@@ -1153,7 +1217,7 @@ Key variables:
 - ✅ M17: One canonical output for website and extension (backend builds the summary, shared Markdown parser, age direction preserved, 26 new backend tests and 10 new extension tests)
 
 ### Test Coverage
-- **457/457 backend tests passing** (100%, 1 skipped)
+- **546/546 backend tests passing** (100%, 1 skipped)
 - **50/50 extension unit tests passing**
 - **31/31 extension live backend checks passing**
 - **Zero regressions** from M1-M12

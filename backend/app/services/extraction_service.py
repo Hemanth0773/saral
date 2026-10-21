@@ -159,6 +159,7 @@ _ABBREVIATIONS = {
     "rs", "no", "art", "fig", "ref", "sec", "cl", "para", "m/s", "dr", "mr",
     "mrs", "ms", "prof", "st", "jr", "sr", "vol", "pp", "ed", "viz", "cf",
     "ie", "eg", "etc", "www", "http", "https", "pp", "vol", "ugc", "aishe",
+    "govt", "dept", "m/s",
 }
 
 
@@ -642,18 +643,8 @@ def extract_monetary_amounts(text: str) -> List[ExtractedMonetaryAmount]:
 
             source_text = extract_surrounding_text(text, match.start(), match.end(), 60)
 
-            # Determine purpose from context
-            purpose = None
-            if 'assistance' in source_text.lower():
-                purpose = 'assistance'
-            elif 'fee' in source_text.lower():
-                purpose = 'fee'
-            elif 'interest' in source_text.lower():
-                purpose = 'interest'
-            elif 'loan' in source_text.lower():
-                purpose = 'loan'
-            elif 'scholarship' in source_text.lower():
-                purpose = 'scholarship'
+            # The clause the amount sits in says what the money is for.
+            purpose = _clause_context(text, match.start(), match.end()) or None
 
             # Normalize amount (remove commas, keep decimal)
             normalized = amount_str.replace(',', '')
@@ -669,8 +660,53 @@ def extract_monetary_amounts(text: str) -> List[ExtractedMonetaryAmount]:
     return amounts
 
 
+def _clause_context(text: str, start: int, end: int) -> str:
+    """
+    The clause a percentage belongs to.
+
+    A percentage on its own ("30%") says nothing. The clause it sits in - "30%
+    slots will be reserved for the women candidates" - says what it is about.
+    """
+    left = start
+    while left > 0:
+        char = text[left - 1]
+        if char in ".;,":
+            break
+        # A blank line ends the paragraph, a single line break is a wrap.
+        if char == "\n" and text[left - 2: left] == "\n":
+            break
+        left -= 1
+
+    right = end
+    while right < len(text):
+        char = text[right]
+        if char in ".;":
+            break
+        if char == "\n" and text[right + 1: right + 2] == "\n":
+            break
+        right += 1
+
+    # The clause ends at the next comma as well, so that a sentence with two
+    # percentages gives each of them its own context.
+    comma = text.find(",", end, right)
+    if comma != -1:
+        right = comma
+
+    clause = text[left:right].strip()
+    clause = re.sub(r"^[,;:]\s*", "", clause)
+    # A discourse marker is not part of the fact.
+    clause = re.sub(
+        r"^(?:However|Further|Moreover|Also|Note|Thus|Therefore|Meanwhile)\b[,:]?\s*",
+        "",
+        clause,
+        flags=re.IGNORECASE,
+    )
+    clause = re.sub(r"\s+", " ", clause)
+    return clause.strip(" ,;:")
+
+
 def extract_percentages(text: str) -> List[ExtractedPercentage]:
-    """Extract percentage values."""
+    """Extract percentage values together with what they are about."""
     # A page marker is printing metadata, never content.
     text = strip_page_markers(text)
 
@@ -685,27 +721,19 @@ def extract_percentages(text: str) -> List[ExtractedPercentage]:
     for pattern in percent_patterns:
         for match in re.finditer(pattern, text, re.IGNORECASE):
             percent_str = match.group(1)
+            context = _clause_context(text, match.start(), match.end())
 
-            if percent_str in seen:
+            key = (percent_str, context.lower())
+            if key in seen:
                 continue
-            seen.add(percent_str)
+            seen.add(key)
 
-            value = float(percent_str)
-            source_text = extract_surrounding_text(text, match.start(), match.end(), 50)
-
-            # Determine purpose
-            purpose = None
-            if 'interest' in source_text.lower():
-                purpose = 'interest rate'
-            elif 'discount' in source_text.lower():
-                purpose = 'discount'
-            elif 'tax' in source_text.lower():
-                purpose = 'tax'
+            source_text = extract_surrounding_text(text, match.start(), match.end(), 80)
 
             percentages.append(ExtractedPercentage(
                 percentage=f"{percent_str}%",
-                value=value,
-                purpose=purpose,
+                value=float(percent_str),
+                purpose=context or None,
                 original_text=source_text
             ))
 

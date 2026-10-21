@@ -44,7 +44,7 @@ type FactListProps = {
 export default function FactList({ facts, hidden = 0 }: FactListProps) {
   if (!facts.length) {
     return (
-      <p className="rounded-lg bg-saral-lavender p-2.5 text-[11px] font-medium leading-snug text-saral-ink/70">
+      <p className="rounded-lg bg-white p-2.5 text-[11px] font-medium leading-snug text-saral-ink/70 shadow-[2px_2px_0_0_#0D0D0D]">
         No structured facts could be read with confidence from this document. The simplified
         text above is the complete result.
       </p>
@@ -53,7 +53,7 @@ export default function FactList({ facts, hidden = 0 }: FactListProps) {
 
   return (
     <>
-      <ul className="flex flex-col gap-2 rounded-lg bg-saral-lavender p-2.5">
+      <ul className="flex flex-col gap-2 rounded-lg bg-white p-2.5 shadow-[2px_2px_0_0_#0D0D0D]">
         {facts.map((fact) => {
           const Icon = ICONS[fact.kind] ?? InfoIcon;
           return (

@@ -113,7 +113,7 @@ export default function AudioDeck({
   const hasAudio = Boolean(audioUrl) && !playbackFailed;
 
   return (
-    <div className="rounded-xl border-2 border-saral-ink bg-saral-charcoal p-2.5 text-white shadow-[2px_2px_0_0_#0D0D0D]">
+      <div className="rounded-xl border-2 border-saral-ink bg-white p-2.5 text-saral-ink shadow-[2px_2px_0_0_#0D0D0D]">
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -132,7 +132,7 @@ export default function AudioDeck({
         </button>
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div className="flex items-center justify-between text-[10px] font-bold text-white/80">
+          <div className="flex items-center justify-between text-[10px] font-bold text-saral-ink/70">
             <span>{formatTime(currentTime)}</span>
             <span className="opacity-70">{duration ? formatTime(duration) : '—'}</span>
           </div>
@@ -158,7 +158,7 @@ export default function AudioDeck({
             type="button"
             onClick={cycleSpeed}
             aria-label={`Playback speed ${speed} times. Activate to change.`}
-            className="focus-ring-light rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-bold hover:bg-white/25"
+            className="focus-ring-light rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-saral-ink hover:bg-neutral-200"
           >
             {speed.toFixed(2).replace(/0$/, '')}x
           </button>
@@ -166,7 +166,7 @@ export default function AudioDeck({
             type="button"
             onClick={() => setIsMuted((muted) => !muted)}
             aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
-            className="focus-ring-light rounded p-0.5 hover:bg-white/15"
+            className="focus-ring-light rounded p-0.5 text-saral-ink hover:bg-neutral-100"
           >
             <VolumeIcon className="text-[16px]" />
           </button>

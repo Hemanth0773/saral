@@ -401,6 +401,28 @@ extension.
 `POST /api/documents/readability`, `POST /api/translate`, `POST /api/tts` and
 `GET /api/media/audio/{filename}`.
 
+The simplification response also carries the measured `readability` and the
+canonical `instant_summary`, so neither interface needs a second request for
+them.
+
+### Extension Appearance
+The popup surface is yellow and the cards, panels and inner boxes on it are
+white, with the existing black borders and hard offset shadows, the Jakarta
+Sans and Space Grotesk typography, and the existing hover effects, audio
+player, language controls and Copy button. The outer corners of the popup are
+rounded. The popup scrolls as one surface: the result, the audio controls, the
+language buttons, the Copy button and the footer are all reachable by scrolling
+the popup.
+
+### Extension Appearance
+The popup surface is yellow and the cards, panels and inner boxes on it are
+white, with the existing black borders and hard offset shadows, the Jakarta
+Sans and Space Grotesk typography, and the existing hover effects, audio
+player, language controls and Copy button. The outer corners of the popup are
+rounded. The popup scrolls as one surface: the result, the audio controls, the
+language buttons, the Copy button and the footer are all reachable by scrolling
+the popup.
+
 ### Extension Instant Summary and Markdown
 The "Instant Summary" card is built by the backend and returned in the
 simplify response as `instant_summary`. The website and the extension both
@@ -548,15 +570,15 @@ validated, and the response reports `validation_passed` and
 cd backend
 python -m pytest tests/ -v
 ```
-- **Total Tests**: 513 (+1 skipped when a local origin is not on the configured allow-list)
-- **Passing**: 513
+- **Total Tests**: 546 (+1 skipped when a local origin is not on the configured allow-list)
+- **Passing**: 546
 - **Failing**: 0
 - **Test Coverage**: ~70% across all modules
 
 **Extension Tests:**
 ```bash
 cd extension
-npm test                # 104 unit tests (node:test)
+npm test                # 117 unit tests (node:test)
 npm run verify:backend  # 31 live checks against a running backend
 npm run verify:scholarship # live Instant Summary check against a running backend
 ```
@@ -568,6 +590,8 @@ npm run verify:scholarship # live Instant Summary check against a running backen
 - `src/__tests__/guards.test.ts` — duplicate-submission guard (4)
 - `src/__tests__/markdown.test.ts` — Markdown parsing, escape artefacts, HTML safety (23)
 - `src/__tests__/factsSummary.test.ts` — Instant Summary quality, duplicated labels, headings, page markers (15)
+- `src/__tests__/canonicalOutput.test.ts` — the canonical summary is shared with the website (10)
+- `src/__tests__/uiPresentation.test.ts` — reading level, one scroll surface, colour swap, safe rendering (13)
 - `src/__tests__/canonicalOutput.test.ts` — the canonical summary is shared with the website (10)
 
 **Backend rate-limit tests** (`backend/tests/test_llm_retry.py`, 37 tests):- Groq 429 followed by a successful retry, honouring the provider's retry delay

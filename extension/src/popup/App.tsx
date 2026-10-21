@@ -23,9 +23,9 @@ import {
 } from '../shared/config';
 import { describeError, toSaralError } from '../shared/errors';
 import { buildFactSummary, toFactItem } from '../shared/facts';
+import { formatReadingLevel } from '@saral-ui/readability';
 import type {
   ExtractionResponse,
-  ReadabilityResponse,
   SimplificationResponse,
   TranslationResponse,
   TTSResponse,
@@ -57,7 +57,6 @@ export default function App() {
   const [isSimplifying, setIsSimplifying] = useState(false);
   const [simplification, setSimplification] = useState<SimplificationResponse | null>(null);
   const [structured, setStructured] = useState<ExtractionResponse | null>(null);
-  const [readability, setReadability] = useState<ReadabilityResponse | null>(null);
 
   const [activeLanguage, setActiveLanguage] = useState('en');
   const [translation, setTranslation] = useState<TranslationResponse | null>(null);
@@ -106,7 +105,6 @@ export default function App() {
   const resetResult = useCallback(() => {
     setSimplification(null);
     setStructured(null);
-    setReadability(null);
     setTranslation(null);
     setTts(null);
     setTtsError(null);
@@ -258,13 +256,8 @@ export default function App() {
       setSimplification(result);
       setDetectedLanguage(detected);
 
-      // Facts and readability are extra insights; a failure here must not
-      // discard the simplified text the user already received.
-      void Promise.allSettled([
-        saralApi
-          .readability(sourceText, result.simplified_text, TARGET_GRADE_LEVEL)
-          .then(setReadability),
-      ]);
+      // The backend measures the readability together with the simplification,
+      // so nothing here can fail and lose the result the user already got.
 
       // The backend builds the canonical Instant Summary. Only an older
       // backend that does not return it needs the structured extraction.
@@ -394,13 +387,10 @@ export default function App() {
     return buildFactSummary(structured?.structured_information, simplification?.preserved_facts);
   }, [simplification, structured]);
 
-  const gradeLabel = useMemo(() => {
-    const grade = readability?.simplified?.flesch_kincaid_grade;
-    if (readability?.supported && typeof grade === 'number') {
-      return `Grade ${grade.toFixed(1)} Reading`;
-    }
-    return null;
-  }, [readability]);
+  const gradeLabel = useMemo(
+    () => formatReadingLevel(simplification?.readability, TARGET_GRADE_LEVEL),
+    [simplification],
+  );
 
   const audioUrl = useMemo(() => (tts ? joinUrl(baseUrl, tts.audio_url) : null), [baseUrl, tts]);
 
@@ -414,7 +404,7 @@ export default function App() {
   const canReadAloud = Boolean(simplification) && !isTtsLoading;
 
   return (
-    <div className="relative flex h-full max-h-[600px] w-[400px] flex-col bg-saral-surface">
+      <div className="relative flex h-full max-h-[600px] w-[400px] flex-col rounded-xl bg-saral-yellow">
       <Header onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <main className="scroll-area flex-1 overflow-y-auto px-3 pb-3 pt-3">

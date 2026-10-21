@@ -17,7 +17,11 @@
 
   body {
     margin: 0;
-    background-color: #fbf8fc;
+    /* The popup surface is yellow; the cards on it are white. */
+    background-color: #f9c915;
+    /* A restrained radius on the outer corners of the popup. */
+    border-radius: 12px;
+    overflow: hidden;
     color: #0d0d0d;
     font-family: 'Plus Jakarta Sans', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
