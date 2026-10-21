@@ -55,9 +55,38 @@ def normalize_text_for_readability(text: str) -> str:
     return text
 
 
+def _estimate_syllables(word: str) -> int:
+    """
+    Estimates the syllables of a word the CMU dictionary does not know.
+
+    textstat raises a KeyError for such a word, which used to make the whole
+    measurement fail for real government documents. The estimate counts the
+    vowel groups and applies the usual English adjustments.
+    """
+    vowels = "aeiouy"
+    count = 0
+    previous_was_vowel = False
+
+    for char in word.lower():
+        is_vowel = char in vowels
+        if is_vowel and not previous_was_vowel:
+            count += 1
+        previous_was_vowel = is_vowel
+
+    if word.lower().endswith("e") and count > 1:
+        count -= 1
+    if word.lower().endswith("le") and len(word) > 2 and word[-3] not in vowels:
+        count += 1
+
+    return max(1, count)
+
+
 def count_syllables(text: str) -> int:
     """
     Count syllables in text using textstat.
+
+    Each word is counted on its own, so a single word that is missing from
+    the CMU dictionary no longer makes the whole measurement fail.
 
     Args:
         text: Text to analyze
@@ -67,11 +96,51 @@ def count_syllables(text: str) -> int:
     """
     if not text or not text.strip():
         return 0
-    try:
-        return textstat.syllable_count(text)
-    except Exception as e:
-        logger.warning(f"Error counting syllables: {str(e)}")
-        return 0
+
+    total = 0
+    for word in re.findall(r"[A-Za-z']+", text):
+        try:
+            total += textstat.syllable_count(word)
+        except Exception:
+            total += _estimate_syllables(word)
+
+    return total
+
+
+def _flesch_scores(text: str) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Calculates the Flesch Reading Ease and the Flesch-Kincaid grade.
+
+    The formulas are the ones textstat uses. They are applied here as a
+    fallback for texts that textstat cannot process because of a word that is
+    not in its dictionary.
+
+    Args:
+        text: Text to analyze
+
+    Returns:
+        Tuple of (reading_ease, grade_level), either of which may be None
+    """
+    if not text or not text.strip():
+        return None, None
+
+    words = text_utils.count_words(text)
+    sentences = text_utils.count_sentences(text)
+    syllables = count_syllables(text)
+
+    if words == 0 or sentences == 0:
+        return None, None
+
+    words_per_sentence = words / sentences
+    syllables_per_word = syllables / words
+
+    reading_ease = 206.835 - 1.015 * words_per_sentence - 84.6 * syllables_per_word
+    grade_level = 0.39 * words_per_sentence + 11.8 * syllables_per_word - 15.59
+
+    return (
+        max(0.0, min(100.0, reading_ease)),
+        max(0.0, min(18.0, grade_level)),
+    )
 
 
 def calculate_flesch_reading_ease(text: str) -> Optional[float]:
@@ -102,12 +171,18 @@ def calculate_flesch_reading_ease(text: str) -> Optional[float]:
         # Clamp to 0-100 range (textstat can return values outside this)
         return max(0.0, min(100.0, score))
     except KeyError as e:
-        # textstat CMU dict lookup failed (unknown word/number)
+        # textstat CMU dict lookup failed for an unknown word. The score is
+        # calculated with the same formula, using an estimate for that word.
         logger.debug(f"Flesch Reading Ease KeyError (CMU dict lookup): {str(e)}")
-        return None
+        reading_ease, _ = _flesch_scores(normalize_text_for_readability(text))
+        return reading_ease
     except Exception as e:
         logger.warning(f"Error calculating Flesch Reading Ease: {str(e)}")
-        return None
+        try:
+            reading_ease, _ = _flesch_scores(normalize_text_for_readability(text))
+            return reading_ease
+        except Exception:
+            return None
 
 
 def calculate_flesch_kincaid_grade(text: str) -> Optional[float]:
@@ -138,12 +213,18 @@ def calculate_flesch_kincaid_grade(text: str) -> Optional[float]:
         # Clamp to reasonable range (0-18)
         return max(0.0, min(18.0, grade))
     except KeyError as e:
-        # textstat CMU dict lookup failed (unknown word/number)
+        # textstat CMU dict lookup failed for an unknown word. The grade is
+        # calculated with the same formula, using an estimate for that word.
         logger.debug(f"Flesch-Kincaid KeyError (CMU dict lookup): {str(e)}")
-        return None
+        _, grade = _flesch_scores(normalize_text_for_readability(text))
+        return grade
     except Exception as e:
         logger.warning(f"Error calculating Flesch-Kincaid Grade: {str(e)}")
-        return None
+        try:
+            _, grade = _flesch_scores(normalize_text_for_readability(text))
+            return grade
+        except Exception:
+            return None
 
 
 def analyze_text_readability(text: str) -> Dict[str, Any]:

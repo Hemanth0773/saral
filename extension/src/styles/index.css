@@ -1,0 +1,158 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body,
+  #root {
+    width: 400px;
+    min-width: 400px;
+    max-height: 600px;
+  }
+
+  html {
+    /*
+     * The canvas behind the popup. It must not paint a background of its own:
+     * a white canvas would show through the rounded corners of the yellow
+     * popup surface as four white square edges.
+     */
+    background-color: transparent;
+  }
+
+  body {
+    margin: 0;
+    /* The popup surface is yellow; the cards on it are white. */
+    background-color: #f9c915;
+    /* A restrained radius on the outer corners of the popup. */
+    border-radius: 12px;
+    overflow: hidden;
+    color: #0d0d0d;
+    font-family: 'Plus Jakarta Sans', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  ::selection {
+    background: #0d0d0d;
+    color: #f9c915;
+  }
+}
+
+@layer components {
+  /* ---- Neo-brutalist surfaces (shared with the Saral website) ---- */
+  .brutal-card {
+    border: 2px solid #0d0d0d;
+    border-radius: 0.75rem;
+    box-shadow: 4px 4px 0 0 #0d0d0d;
+  }
+
+  .brutal-card-sm {
+    border: 2px solid #0d0d0d;
+    border-radius: 0.75rem;
+    box-shadow: 2px 2px 0 0 #0d0d0d;
+  }
+
+  .brutal-pill {
+    border: 2px solid #0d0d0d;
+    border-radius: 9999px;
+    box-shadow: 2px 2px 0 0 #0d0d0d;
+  }
+
+  .brutal-pill-sm {
+    border: 1.5px solid #0d0d0d;
+    border-radius: 9999px;
+    box-shadow: 1.5px 1.5px 0 0 #0d0d0d;
+  }
+
+  /* ---- Tactile buttons ---- */
+  .btn-tactile {
+    transition:
+      transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+      background-color 0.15s ease;
+  }
+
+  .btn-tactile:hover:not(:disabled) {
+    transform: translate(-1.5px, -1.5px);
+    box-shadow: 4.5px 4.5px 0 0 #0d0d0d;
+  }
+
+  .btn-tactile:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 0 #0d0d0d;
+  }
+
+  .btn-tactile:disabled {
+    opacity: 0.45;
+    box-shadow: 2px 2px 0 0 #0d0d0d;
+  }
+
+  /* ---- Focus visibility ---- */
+  .focus-ring:focus-visible {
+    outline: 3px solid #0d0d0d;
+    outline-offset: 2px;
+  }
+
+  .focus-ring-light:focus-visible {
+    outline: 3px solid #f9c915;
+    outline-offset: 2px;
+  }
+
+  /* ---- Scroll areas inside the popup ---- */
+  .scroll-area {
+    scrollbar-width: thin;
+    scrollbar-color: #c9c4d6 transparent;
+  }
+
+  .scroll-area::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scroll-area::-webkit-scrollbar-thumb {
+    background: #c9c4d6;
+    border-radius: 9999px;
+  }
+
+  .scroll-area::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Respect the user's reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

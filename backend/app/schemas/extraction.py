@@ -33,6 +33,13 @@ class ExtractedAgeRequirement(BaseModel):
     """Extracted age requirement"""
     minimum_age: Optional[int] = Field(None, description="Minimum age in years")
     maximum_age: Optional[int] = Field(None, description="Maximum age in years")
+    qualifier: Optional[str] = Field(
+        None,
+        description=(
+            "The direction word from the source, for example 'under', 'at least', "
+            "'not more than' or 'or older'. It keeps 'under 30' apart from '30 or older'."
+        ),
+    )
     original_text: str = Field(..., description="Original text")
 
 

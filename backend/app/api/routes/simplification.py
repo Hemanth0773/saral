@@ -3,12 +3,15 @@ Simplification API routes.
 Handles LLM-based text simplification endpoints.
 """
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.schemas.simplification import SimplificationRequest, SimplificationResponse
 from app.schemas.document import ErrorResponse
 from app.services import llm_service, validation_service
+from app.services import extraction_service, readability_service, summary_service
 from app.services.document_service import generate_document_id
 
 logger = get_logger(__name__)
@@ -93,8 +96,14 @@ async def simplify_document(request: SimplificationRequest) -> dict:
 
         # Perform simplification
         try:
-            # Generate simplification response
-            response_data = llm_service.generate_simplification_response(
+            # Generate simplification response.
+            #
+            # The provider calls and the retry backoff are blocking, so the
+            # work is handed to a worker thread. That keeps the FastAPI event
+            # loop free while a large document is simplified and while the
+            # backend waits for a rate limit window to reset.
+            response_data = await asyncio.to_thread(
+                llm_service.generate_simplification_response,
                 text=request.text,
                 target_grade_level=request.target_grade_level,
                 document_id=document_id
@@ -133,6 +142,19 @@ async def simplify_document(request: SimplificationRequest) -> dict:
                     "error": {
                         "code": "LLM_RATE_LIMITED",
                         "message": "LLM service rate limit exceeded. Please try again in a moment."
+                    }
+                }
+            )
+        except llm_service.LLMTransientError as e:
+            # Every provider was temporarily unavailable (overloaded, 5xx, ...)
+            logger.error(f"LLM service temporarily unavailable: {str(e)}")
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "success": False,
+                    "error": {
+                        "code": "LLM_SERVICE_UNAVAILABLE",
+                        "message": "The simplification service is temporarily busy. Please try again in a moment."
                     }
                 }
             )
@@ -178,6 +200,48 @@ async def simplify_document(request: SimplificationRequest) -> dict:
 
         # Validate fact preservation
         response_data = validation_service.validate_final_response(response_data)
+
+        # Measure the readability of the result, so the website and the
+        # extension can show the same measured result.
+        try:
+            measured = readability_service.compare_readability(
+                original_text=request.text,
+                simplified_text=response_data.get("simplified_text", ""),
+                target_grade_level=request.target_grade_level,
+            )
+            response_data["readability"] = {
+                "original": measured["original"],
+                "simplified": measured["simplified"],
+                "target_grade_level": measured["comparison"]["target_grade_level"],
+                "target_achieved": measured["comparison"]["target_achieved"],
+            }
+        except Exception as readability_error:
+            # A missing measurement must not fail the simplification.
+            logger.warning(f"Could not measure readability: {str(readability_error)}")
+            response_data["readability"] = None
+
+        # Build the canonical Instant Summary. The website and the Chrome
+        # extension render this same list, so the two interfaces cannot show
+        # different facts for the same document. It is derived from the
+        # structured extraction of the source text, not from the model output.
+        try:
+            structured_info = extraction_service.extract_structured_information(
+                text=request.text,
+                extract_title=False,
+                extract_summary=False,
+            )
+            summary = summary_service.build_instant_summary(
+                structured_info,
+                response_data.get("preserved_facts"),
+            )
+            response_data["instant_summary"] = summary["items"]
+            response_data.setdefault("metadata", {})["summary_total"] = summary["total"]
+            response_data["metadata"]["summary_hidden"] = summary["hidden"]
+        except Exception as summary_error:
+            # The summary is an addition, never a reason to fail a
+            # simplification that already succeeded.
+            logger.warning(f"Could not build the instant summary: {str(summary_error)}")
+            response_data["instant_summary"] = []
 
         # Check validation results
         if not response_data["validation_passed"]:

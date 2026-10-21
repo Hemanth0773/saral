@@ -28,6 +28,11 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://127.0.0.1:8000",
     ]
+    # Extra origins matched by pattern. Used for the Saral browser extension,
+    # whose origin is "chrome-extension://<extension id>" and therefore cannot
+    # be listed statically. Only Chrome extension origins are accepted; regular
+    # web origins still have to be listed in CORS_ORIGINS.
+    CORS_ORIGIN_REGEX: str = r"^chrome-extension://[a-z0-9]{32}$"
 
     # File Upload
     MAX_FILE_SIZE_MB: int = 10
@@ -49,6 +54,23 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gpt-3.5-turbo"
     LLM_TEMPERATURE: float = 0.3  # Lower = more consistent/factual
     LLM_MAX_TOKENS: int = 2000
+    # Reasoning effort for reasoning models such as gpt-oss. These models spend
+    # part of max_tokens on internal reasoning, which can leave the answer
+    # truncated. "low" keeps the output budget for the answer. Set to an empty
+    # string to leave the provider default.
+    LLM_REASONING_EFFORT: str = "low"
+
+    # LLM retry / rate-limit handling
+    # Maximum number of attempts per provider for a single chunk. A Groq
+    # "tokens per minute" 429 is temporary, so the request is retried after
+    # the delay the provider asked for instead of failing the whole document.
+    LLM_MAX_RETRIES: int = 3
+    LLM_RETRY_BASE_DELAY: float = 2.0  # seconds, first backoff step
+    LLM_RETRY_MAX_DELAY: float = 60.0  # seconds, upper bound for one wait
+    LLM_RETRY_JITTER: float = 0.25  # +/- fraction applied to the backoff
+    # Overall budget for one simplification request. Bounds the total time
+    # spent waiting between retries so a request can never hang forever.
+    LLM_SIMPLIFICATION_TIMEOUT: int = 240  # seconds
     
     # Gemini Configuration
     GEMINI_API_KEY: str = ""

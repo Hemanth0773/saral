@@ -5,11 +5,13 @@ Validates that critical factual information is preserved in simplified text.
 
 import re
 import logging
+from collections import Counter
 from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime
 
 from app.schemas.simplification import PreservedFact
 from app.core.logging import get_logger
+from app.services.text_fidelity import validate_fidelity
 
 logger = get_logger(__name__)
 
@@ -169,6 +171,24 @@ def extract_surrounding_text(text: str, start: int, end: int, context_chars: int
     return result.strip()
 
 
+def normalise_fact_text(text: str) -> str:
+    """
+    Normalises the spacing and unit formatting of a text.
+
+    A model may write "25 %" where the source wrote "25%", or "Rs 2,50,000"
+    where the source wrote "Rs. 2,50,000". Those are the same fact and must
+    not be reported as lost.
+    """
+    normalised = text.replace("\u00a0", " ").replace("\u202f", " ").replace("\u2009", " ")
+    # "25 %" is the same fact as "25%"
+    normalised = re.sub(r"(\d)\s+%", r"\1%", normalised)
+    # "Rs 2,50,000" is the same fact as "Rs. 2,50,000"
+    normalised = re.sub(r"\bRs\s+\.", "Rs.", normalised)
+    # "Rs 2,50,000" is the same fact as "Rs. 2,50,000"
+    normalised = re.sub(r"\bRs\s+(?=\d)", "Rs.", normalised)
+    return normalised
+
+
 def validate_fact_preservation(original_text: str, simplified_text: str) -> Tuple[List[PreservedFact], List[str]]:
     """
     Validate that critical facts are preserved in simplified text.
@@ -182,6 +202,9 @@ def validate_fact_preservation(original_text: str, simplified_text: str) -> Tupl
     """
     facts = extract_critical_facts(original_text)
     validation_failures = []
+    # Compare against a normalised copy so a reformatted fact still matches.
+    normalised_simplified = normalise_fact_text(simplified_text)
+    normalised_facts = [normalise_fact_text(fact.value) for fact in facts]
 
     for fact in facts:
         # Check if fact value appears in simplified text
@@ -190,7 +213,7 @@ def validate_fact_preservation(original_text: str, simplified_text: str) -> Tupl
         # For dates, normalize and compare
         if fact.fact_type == "deadline":
             # Try exact match first
-            if fact.value in simplified_text:
+            if normalised_facts[facts.index(fact)] in normalised_simplified:
                 fact_in_simplified = True
             else:
                 # Try normalizing date formats
@@ -206,7 +229,7 @@ def validate_fact_preservation(original_text: str, simplified_text: str) -> Tupl
                 ]
 
                 for pattern in date_patterns:
-                    for match in re.finditer(pattern, simplified_text, re.IGNORECASE):
+                    for match in re.finditer(pattern, normalised_simplified, re.IGNORECASE):
                         found_date_str = match.group(1) if match.lastindex else match.group(0)
                         normalized_found_date = normalize_date_format(found_date_str)
 
@@ -220,30 +243,30 @@ def validate_fact_preservation(original_text: str, simplified_text: str) -> Tupl
         # For money, check for currency symbols and numbers
         elif fact.fact_type == "money":
             # Extract numeric value
-            numeric_value = re.sub(r'[^\d.,]', '', fact.value)
+            numeric_value = re.sub(r'[^\d.,]', '', normalised_facts[facts.index(fact)])
             # Normalize by removing commas for comparison
             normalized_numeric = numeric_value.replace(',', '')
 
             # Look for the value in simplified text
-            if re.search(f'\\b{re.escape(numeric_value)}\\b', simplified_text):
+            if re.search(f'\\b{re.escape(numeric_value)}\\b', normalised_simplified):
                 fact_in_simplified = True
             # Also try without commas
             elif re.search(f'\\b{normalized_numeric}\\b', simplified_text):
                 fact_in_simplified = True
             # Also check for Indian currency symbol near the number
-            elif re.search(f'[₹Rs\\.]?\\s*{re.escape(numeric_value)}', simplified_text):
+            elif re.search(f'[₹Rs\\.]?\\s*{re.escape(numeric_value)}', normalised_simplified):
                 fact_in_simplified = True
             # Try alternative formats (with/without commas)
-            elif re.search(f'[₹Rs\\.]?\\s*{normalized_numeric}', simplified_text):
+            elif re.search(f'[₹Rs\\.]?\\s*{normalized_numeric}', normalised_simplified):
                 fact_in_simplified = True
 
         # For percentages, ages, quantities - check for numbers
         elif fact.fact_type in ["percentage", "age", "quantity"]:
             # Extract the numeric part
-            numeric_match = re.search(r'(\d+(?:\.\d+)?)', fact.value)
+            numeric_match = re.search(r'(\d+(?:\.\d+)?)', normalised_facts[facts.index(fact)])
             if numeric_match:
                 numeric_value = numeric_match.group(1)
-                if re.search(f'\\b{numeric_value}\\b', simplified_text):
+                if re.search(f'\\b{numeric_value}\\b', normalised_simplified):
                     fact_in_simplified = True
 
         fact.preserved_in_simplified = fact_in_simplified
@@ -317,6 +340,34 @@ def normalize_date_format_in_text(text: str) -> str:
     return " ".join(normalized_dates) if normalized_dates else ""
 
 
+def _word_overlap_ratio(original_text: str, simplified_text: str) -> float:
+    """
+    How much of the wording the two texts share.
+
+    A good simplification of a legal document keeps most of the wording on
+    purpose - the legal terms, the numbers and the conditions have to survive
+    - so a high overlap is not proof of a failure. It is only used together
+    with the structure.
+    """
+    original_words = re.findall(r"\w+", original_text.lower())
+    simplified_words = re.findall(r"\w+", simplified_text.lower())
+    if not original_words or not simplified_words:
+        return 0.0
+
+    shared = sum((Counter(original_words) & Counter(simplified_words)).values())
+    return shared / max(len(original_words), len(simplified_words))
+
+
+def _heading_count(text: str) -> int:
+    """Counts the Markdown headings in a text."""
+    return len(re.findall(r"(?m)^\s*#{1,6}\s+\S", text))
+
+
+def _bullet_count(text: str) -> int:
+    """Counts the Markdown list items in a text."""
+    return len(re.findall(r"(?m)^\s*[-*+]\s+\S", text))
+
+
 def validate_simplification_quality(original_text: str, simplified_text: str) -> List[str]:
     """
     Perform basic quality validation of simplification.
@@ -335,25 +386,22 @@ def validate_simplification_quality(original_text: str, simplified_text: str) ->
     if len(original_text) > 50 and len(simplified_text) < len(original_text) * 0.2:
         issues.append("Simplified text is suspiciously short (possible content loss)")
 
-    # Check if simplified text is too similar (no simplification)
-    # Only apply for texts longer than 200 characters to avoid false positives
-    if len(original_text) > 200 and len(simplified_text) > len(original_text) * 0.9:
-        # Calculate actual similarity based on preserved facts and structure
-        original_sentences = re.split(r'[.!?]+', original_text)
-        simplified_sentences = re.split(r'[.!?]+', simplified_text)
-
-        # If number of sentences hasn't changed much, might be too similar
-        if len(simplified_sentences) <= len(original_sentences) * 1.2:
-            # Count preserved fact numbers/dates
-            facts = extract_critical_facts(original_text)
-            preserved_count = 0
-            for fact in facts:
-                if fact.value in simplified_text:
-                    preserved_count += 1
-
-            # If most facts are preserved but text is similar length, that's OK
-            if preserved_count < len(facts) * 0.5:
-                issues.append("Simplified text is too similar to original (possible lack of simplification)")
+    # Check if the text was simplified at all.
+    #
+    # A good simplification of a legal or technical document keeps most of the
+    # wording on purpose, so word overlap alone cannot decide this. The
+    # structure has to be taken into account as well: reorganising a document
+    # into headings and lists is what makes it easier to read.
+    #
+    # Short texts are skipped, because the metrics are unreliable there.
+    if len(original_text) > 200:
+        overlap = _word_overlap_ratio(original_text, simplified_text)
+        structure_improved = (
+            _heading_count(simplified_text) > _heading_count(original_text)
+            or _bullet_count(simplified_text) > _bullet_count(original_text)
+        )
+        if overlap > 0.85 and not structure_improved:
+            issues.append("Simplified text is too similar to original (possible lack of simplification)")
 
     # Check for obvious hallucinations or changes
     original_words = set(re.findall(r'\b\w{4,}\b', original_text.lower()))
@@ -392,6 +440,12 @@ def validate_final_response(response_data: Dict[str, Any]) -> Dict[str, Any]:
     # Validate quality
     quality_issues = validate_simplification_quality(original_text, simplified_text)
     validation_failures.extend(quality_issues)
+
+    # Validate that the simplified text did not add anything the source does
+    # not state (page markers turned into instructions, dropped qualifiers,
+    # swapped entity types, invented numbers).
+    fidelity_issues = validate_fidelity(original_text, simplified_text)
+    validation_failures.extend(fidelity_issues)
 
     # Update response data
     response_data["preserved_facts"] = preserved_facts

@@ -40,7 +40,7 @@ torch==2.5.0
 sentencepiece==0.2.0
 
 # Text-to-Speech (MILESTONE 10)
-edge-tts==7.2.8
+edge-tts==7.3.1
 
 # Database (MILESTONE 11)
 sqlalchemy==2.0.36
