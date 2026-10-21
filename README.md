@@ -410,11 +410,11 @@ The popup surface is yellow and the cards, panels and inner boxes on it are
 white, with the existing black borders and hard offset shadows, the Jakarta
 Sans and Space Grotesk typography, and the existing hover effects, audio
 player, language controls and Copy button. The outer corners of the popup are
-rounded: the canvas behind the popup has its own background, and the popup
-surface and its content are clipped to one radius, so the header follows the
-same curve. The popup scrolls as one surface: the result, the audio controls,
-the language buttons, the Copy button and the footer are all reachable by
-scrolling the popup.
+rounded: the canvas behind the popup is transparent, so nothing paints white
+outside the rounded yellow surface, and the popup content is clipped to the
+same radius so the header follows the curve. The popup scrolls as one surface:
+the result, the audio controls, the language buttons, the Copy button and the
+footer are all reachable by scrolling the popup.
 
 ### Extension Keyboard Shortcut
 `Alt+S` opens the Saral popup from any page. It uses Chrome's reserved
@@ -580,7 +580,7 @@ python -m pytest tests/ -v
 **Extension Tests:**
 ```bash
 cd extension
-npm test                # 119 unit tests (node:test)
+npm test                # 123 unit tests (node:test)
 npm run verify:backend  # 31 live checks against a running backend
 npm run verify:scholarship # live Instant Summary check against a running backend
 ```
@@ -593,7 +593,7 @@ npm run verify:scholarship # live Instant Summary check against a running backen
 - `src/__tests__/markdown.test.ts` — Markdown parsing, escape artefacts, HTML safety (23)
 - `src/__tests__/factsSummary.test.ts` — Instant Summary quality, duplicated labels, headings, page markers (15)
 - `src/__tests__/canonicalOutput.test.ts` — the canonical summary is shared with the website (10)
-- `src/__tests__/uiPresentation.test.ts` — no reading level, one scroll surface, rounded popup surface, colour swap, shortcut registration, safe rendering (14)
+- `src/__tests__/uiPresentation.test.ts` — no reading level, one scroll surface, rounded popup surface, colour swap, shortcut registration, Help & Docs hover, safe rendering (18)
 - `src/__tests__/canonicalOutput.test.ts` — the canonical summary is shared with the website (10)
 
 **Backend rate-limit tests** (`backend/tests/test_llm_retry.py`, 37 tests):- Groq 429 followed by a successful retry, honouring the provider's retry delay

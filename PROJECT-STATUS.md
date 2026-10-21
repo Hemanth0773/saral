@@ -1,8 +1,8 @@
 # Project Status: Cognitive Accessibility Simplifier
 
 **Last Updated**: October 20, 2026  
-**Current Milestone**: Milestone 20 (Popup Corners, Reading Level Removal, Alt+S Shortcut) - Complete  
-**Overall Completion**: ~100% (Milestones 1-20 complete, 546 backend tests + 119 extension tests passing)
+**Current Milestone**: Milestone 21 (Popup Corner Edges and Help & Docs Hover) - Complete  
+**Overall Completion**: ~100% (Milestones 1-21 complete, 546 backend tests + 123 extension tests passing)
 
 ---
 
@@ -29,6 +29,7 @@
 - ✅ **Milestone 18 (Accuracy and Completeness of the Simplified Output)**: Complete - Age direction, negation, page markers, document vs account condition, heading-aware sections, "too similar" warning refined, 56 new backend regression tests on the complete notice
 - ✅ **Milestone 19 (Summary Quality, Readability and Extension Polish)**: Complete - Contextual percentages and amounts, fact ranking and de-duplication, measured reading level in both interfaces, one scroll surface, yellow popup with white cards, 30 new backend tests and 13 new extension tests passing
 - ✅ **Milestone 20 (Popup Corners, Reading Level Removal, Alt+S Shortcut)**: Complete - Rounded popup surface with a matching canvas, no reading level label in either interface, the shortcut uses Chrome's reserved action command, 2 new extension tests passing
+- ✅ **Milestone 21 (Popup Corner Edges and Help & Docs Hover)**: Complete - The white canvas behind the rounded corners is gone, the Help & Docs link keeps dark text and underlines on hover, 4 new extension tests passing
 
 ### Architecture Diagram
 - System architecture diagram created: `docs/system-architecture.svg` and `docs/system-architecture.png`
@@ -36,7 +37,7 @@
 
 ### Key Metrics
 - **Backend Tests**: 546 passing (+1 skipped), 0 failing
-- **Extension Unit Tests**: 119 passing (node:test)
+- **Extension Unit Tests**: 123 passing (node:test)
 - **Extension Live Backend Checks**: 31 passing, 0 failing
 - **Test Coverage**: ~70% across all modules
 - **API Endpoints**: 16 (8 live-tested with HTTP requests in M12; 8 more exercised by the extension verification)
@@ -50,6 +51,69 @@
 - **M18 Verification**: the complete scholarship notice is a regression fixture (`backend/tests/fixtures/scholarship_terms.txt`) covered by 55 new backend tests; two live runs of the full document preserved all 27 checked requirements with `validation_passed: true` and no artefacts
 - **M19 Verification**: the summary shows contextual facts ("Reservation: 30% of slots will be reserved for the women candidates"), the age rule once, the negative rules as "Not eligible"; the popup was rendered in a browser (yellow surface, white cards, one scroll surface)
 - **M20 Verification**: Chrome's computed styles for the popup surface were read back over the DevTools protocol (canvas white, popup surface yellow with a 12px radius and `overflow: hidden`, the content clipped to the same radius, cards white with the hard black shadow); the rendered popup shows no reading level and exactly one scrollable element; the manifest registers Chrome's reserved `_execute_action` command with `Alt+S`
+- **M21 Verification**: the canvas behind the popup computes to `rgba(0, 0, 0, 0)` (nothing paints white outside the rounded surface) and the surface stays yellow with a 12px radius; the Help & Docs link was measured with its real `:hover` pseudo state forced through the DevTools CSS domain - the text stays `rgb(13, 13, 13)` and only the underline strengthens from 40 % to full
+---
+
+## Milestone 21 — Popup Corner Edges and Help & Docs Hover
+
+**Status**: ✅ COMPLETE  
+**Date Completed**: October 21, 2026
+
+**Root Causes**
+
+1. **White square edges around the rounded corners.** The `html` element was
+   given a white background in Milestone 20 so the body's yellow would not be
+   propagated to the whole window. That white canvas is exactly what shows
+   through the four rounded corners of the yellow popup surface, so the popup
+   read as a white square with a yellow card in it.
+2. **Help & Docs turned yellow on hover.** The link used
+   `hover:text-saral-yellow` with a yellow underline. On the yellow popup
+   background the hovered text and its underline disappeared.
+
+**What Changed**
+
+| File | Change |
+| --- | --- |
+| `extension/src/styles/index.css` | The canvas behind the popup is transparent, so nothing paints white outside the rounded yellow surface. |
+| `extension/src/popup/components/Footer.tsx` | The yellow hover was removed. The text stays dark, the underline is a subtle dark line that strengthens on hover with a short transition, and the focus ring is unchanged. |
+| `extension/src/__tests__/uiPresentation.test.ts` | Tests for the transparent canvas, the yellow and rounded surface, and the Help & Docs link. |
+
+**Verification in Chrome**
+
+The styles Chrome computes for the built popup:
+
+```
+htmlBackground: rgba(0, 0, 0, 0)     nothing paints white behind the corners
+bodyBackground: rgb(249, 201, 21)       the yellow popup surface
+bodyRadius:    12px
+bodyOverflow:  hidden
+```
+
+The Help & Docs link, measured with its real `:hover` pseudo state forced
+through the DevTools CSS domain:
+
+```
+                 at rest                     with :hover
+textColor:       rgb(13, 13, 13)           rgb(13, 13, 13)   (never yellow)
+underlineColor:  rgba(13, 13, 13, 0.4)     rgb(13, 13, 13)   (strengthens)
+background:      transparent                transparent
+```
+
+The compiled stylesheet contains `.hover\:decoration-saral-ink:hover` and no
+`hover:text-saral-yellow` or `hover:bg-saral-yellow` rule at all.
+
+**Known Limitations (Honest)**
+
+- The canvas behind the popup is transparent. Where the extension popup window
+  paints an opaque background of its own, that colour shows through the four
+  rounded corners instead of white. On the Chrome builds used here the popup
+  window is transparent, so the corners show the desktop.
+- The verification served the built folder and read the styles Chrome computed
+  for it. Chrome 155 in this environment ignores `--load-extension`, so the
+  native popup window itself could not be opened automatically.
+- The link is still a button that opens the bundled help page; only its hover
+  treatment changed.
+
 ---
 
 ## Milestone 20 — Popup Corners, Reading Level Removal, Alt+S Shortcut
@@ -676,7 +740,7 @@ The same request previously failed outright with a 503.
 
 **Test Results**
 - Backend: **346 passing, 1 skipped, 0 failing** (was 338 — the 8 new CORS tests, no regressions)
-- Extension Unit Tests: **119 passing** (config, extractor, facts, errors, api client, markdown, canonical output, UI presentation)
+- Extension Unit Tests: **123 passing** (config, extractor, facts, errors, api client, markdown, canonical output, UI presentation)
 - Extension live backend checks: **31 passing, 0 failing** (health + CORS, simplify, extract-info, readability, translate en→kn, TTS + audio fetch, error handling)
 - Extension typecheck (`tsc --noEmit`, strict): clean
 - Extension lint (`oxlint`): clean
@@ -1288,7 +1352,7 @@ Key variables:
 
 ### Test Coverage
 - **546/546 backend tests passing** (100%, 1 skipped)
-- **119/119 extension unit tests passing**
+- **123/123 extension unit tests passing**
 - **31/31 extension live backend checks passing**
 - **Zero regressions** from M1-M12
 - **~70% code coverage** overall (pytest-cov)

@@ -16,7 +16,8 @@ export default function Footer({ onOpenHelp }: FooterProps) {
       <button
         type="button"
         onClick={onOpenHelp}
-        className="focus-ring inline-flex items-center gap-1 font-extrabold text-saral-ink underline decoration-saral-yellow decoration-2 underline-offset-2 hover:text-saral-yellow"
+        title="Open the Saral help and documentation"
+        className="focus-ring inline-flex items-center gap-1 font-extrabold text-saral-ink underline decoration-saral-ink/40 decoration-2 underline-offset-2 transition-[text-decoration-color] duration-150 hover:decoration-saral-ink"
       >
         <span>Help &amp; Docs</span>
         <ExternalLinkIcon className="text-[12px]" />

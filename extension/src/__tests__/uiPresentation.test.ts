@@ -107,6 +107,26 @@ test('the popup surface and its content share one radius', () => {
   assert.ok(app.includes('overflow-hidden'));
 });
 
+test('the canvas behind the popup is transparent', () => {
+  const styles = readSource('extension/src/styles/index.css');
+
+  // A white canvas shows through the rounded corners of the yellow popup
+  // surface as four white square edges.
+  const htmlRule = styles.slice(styles.indexOf('html {'), styles.indexOf('body {'));
+  assert.ok(htmlRule.includes('background-color'), 'the html element needs a background');
+  assert.equal(htmlRule.includes('#ffffff'), false, 'the canvas must not be white');
+  assert.ok(htmlRule.includes('transparent'));
+});
+
+test('the popup surface is yellow and rounded', () => {
+  const styles = readSource('extension/src/styles/index.css');
+  const bodyRule = styles.slice(styles.indexOf('body {'), styles.indexOf('button,'));
+
+  assert.ok(bodyRule.includes('background-color: #f9c915'), 'the popup surface is yellow');
+  assert.ok(bodyRule.includes('border-radius: 12px'), 'the popup surface is rounded');
+  assert.ok(bodyRule.includes('overflow: hidden'), 'the content is clipped to the radius');
+});
+
 test('the cards are white', () => {
   const hero = readSource('extension/src/popup/components/HeroCard.tsx');
   const input = readSource('extension/src/popup/components/InputCard.tsx');
@@ -119,6 +139,30 @@ test('the cards are white', () => {
     assert.equal(source.includes('bg-saral-charcoal'), false, 'a panel must not stay dark');
   }
   assert.ok(hero.includes('bg-white'), 'the hero card must be white');
+});
+
+// ============================================================
+// The Help & Docs link
+// ============================================================
+
+test('the Help & Docs link does not turn yellow on hover', () => {
+  const footer = readSource('extension/src/popup/components/Footer.tsx');
+
+  // The popup background is yellow, so yellow text would disappear.
+  assert.equal(footer.includes('hover:text-saral-yellow'), false);
+  assert.equal(footer.includes('hover:bg-saral-yellow'), false);
+  assert.equal(footer.includes('text-saral-yellow'), false);
+});
+
+test('the Help & Docs link keeps its dark text and an underline', () => {
+  const footer = readSource('extension/src/popup/components/Footer.tsx');
+
+  assert.ok(footer.includes('text-saral-ink'), 'the text stays dark');
+  assert.ok(footer.includes('underline'), 'the link is underlined');
+  assert.ok(footer.includes('hover:decoration-saral-ink'), 'the underline strengthens on hover');
+  assert.ok(footer.includes('focus-ring'), 'keyboard focus stays visible');
+  assert.ok(footer.includes('onClick={onOpenHelp}'), 'the link still opens the help page');
+  assert.ok(footer.includes('ExternalLinkIcon'), 'the external link icon is kept');
 });
 
 // ============================================================

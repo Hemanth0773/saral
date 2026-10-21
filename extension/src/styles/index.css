@@ -17,11 +17,11 @@
 
   html {
     /*
-     * The canvas behind the popup. Without a background of its own the
-     * browser would paint the body background over the whole window, and the
-     * rounded corners of the popup surface would never be seen.
+     * The canvas behind the popup. It must not paint a background of its own:
+     * a white canvas would show through the rounded corners of the yellow
+     * popup surface as four white square edges.
      */
-    background-color: #ffffff;
+    background-color: transparent;
   }
 
   body {
