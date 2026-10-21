@@ -59,7 +59,10 @@ ACTION_WORD_RE = re.compile(
     r"deposit|remit|register|pay|pays|paid|claim|generate|forward|transmit|"
     r"retain|retains|produce|produces|approach|contact|comply|eligible|entitled|"
     r"responsible|liable|reject|rejected|accept|accepted|complete|completing|"
-    r"ask|asked|notified|remain|open|prohibited|permitted)\b",
+    r"ask|asked|notified|remain|open|prohibited|permitted|included|including|"
+    r"having|accredited|recognised|recognized|empowered|awarding|deemed|"
+    r"specified|prescribed|constitute|belongs|importance|earmarked|registered|"
+    r"relinquish|cancel|tender|avail|declared|short\s+listed)\b",
     re.IGNORECASE,
 )
 
@@ -74,6 +77,25 @@ _NOT_ABBREVIATIONS = {
     "two", "any", "our", "out", "off", "let", "set", "get", "far", "too", "see",
     "say", "use", "own", "due", "end", "ask", "aid", "add",
 }
+# Words that show a statement is a rule that does NOT apply.
+NEGATION_MARKERS = (
+    "not eligible",
+    "ineligible",
+    "are not",
+    "is not",
+    "shall not",
+    "must not",
+    "cannot",
+    "can not",
+    "no longer",
+    "not permitted",
+    "not allowed",
+    "not to apply",
+    "not available",
+    "not be given",
+    "not be considered",
+    "not receive",
+)
 
 # Words that show a statement is about who qualifies.
 ELIGIBILITY_KEYWORDS = (
@@ -119,7 +141,7 @@ def _is_heading_line(line: str) -> bool:
     is a title, not a statement, and must not become a fact.
     """
     candidate = line.strip()
-    candidate = re.sub(r"^\s*(\d{1,3}|[IVXLCDM]{1,6})[.)\s]\s*", "", candidate)
+    candidate = re.sub(r"^\s*(\d{1,3}|[IVXLCDMivxlcdm]{1,6})[.)\s]\s*", "", candidate)
     candidate = re.sub(r"^\s*[-*•#]+\s*", "", candidate)
     candidate = candidate.strip()
     if len(candidate) < 3:
@@ -132,12 +154,22 @@ def _is_heading_line(line: str) -> bool:
     return " " in candidate or len(letters) >= 4
 
 
+# Short words that are abbreviations rather than the end of a sentence.
+_ABBREVIATIONS = {
+    "rs", "no", "art", "fig", "ref", "sec", "cl", "para", "m/s", "dr", "mr",
+    "mrs", "ms", "prof", "st", "jr", "sr", "vol", "pp", "ed", "viz", "cf",
+    "ie", "eg", "etc", "www", "http", "https", "pp", "vol", "ugc", "aishe",
+}
+
+
 def _ends_sentence(text: str, index: int) -> bool:
     """
     True when the punctuation at ``index`` really ends a sentence.
 
-    "Rs. 2,50,000" and "No. 3" contain a full stop that does not end a
-    sentence, and splitting on it would cut a rule in half.
+    "Rs. 2,50,000" contains a full stop that does not end a sentence, and
+    splitting on it would cut a rule in half. An abbreviation only counts as
+    an abbreviation when the sentence continues after it, so "NSP." at the
+    end of a sentence still ends it.
     """
     char = text[index]
     if char not in ".!?":
@@ -145,13 +177,22 @@ def _ends_sentence(text: str, index: int) -> bool:
     if char != ".":
         return True
 
-    start = index
-    while start > 0 and (text[start - 1].isalnum() or text[start - 1] in "'-"):
-        start -= 1
-    word = text[start:index]
-    if len(word) <= 3 and word[:1].isupper() and word.lower() not in _NOT_ABBREVIATIONS:
-        # An abbreviation such as "Rs." or "No." does not end a sentence.
+    # "www.ugc.ac.in" - a full stop inside a name, not the end of a sentence.
+    following = text[index + 1: index + 2]
+    if following.islower():
         return False
+
+    start = index
+    while start > 0 and (text[start - 1].isalnum() or text[start - 1] in "'-/"):
+        start -= 1
+    word = text[start:index].lower().strip()
+
+    if word in _ABBREVIATIONS:
+        # The sentence continues when a lower case letter or a digit follows.
+        following = text[index + 1:].lstrip()
+        if following and (following[0].islower() or following[0].isdigit()):
+            return False
+
     return True
 
 
@@ -160,9 +201,17 @@ def _clean_fragment(text: str) -> str:
     cleaned = text.strip()
     cleaned = re.sub(r"^[\s,;:\-–—•*]+", "", cleaned)
     cleaned = re.sub(r"[\s,;:\-–—•*]+$", "", cleaned)
-    # Drop a leading list marker such as "III." or "4)" that belongs to the
-    # numbering of the source, not to the statement itself.
-    cleaned = re.sub(r"^(?:\d{1,3}|[IVXLCDM]{1,6})[.)\s]+\s*", "", cleaned)
+    # Drop a leading section heading such as "(iii) ONLY ONE BENEFIT:".
+    cleaned = re.sub(
+        r"^\(?[IVXLCDMivxlcdm0-9]{1,6}\)?\s+[A-Z][A-Z0-9 ,.'()/&:-]{2,}:\s*",
+        "",
+        cleaned,
+    )
+    # Drop a leading list marker such as "III." or "(i)" or "4)" that belongs
+    # to the numbering of the source, not to the statement itself.
+    cleaned = re.sub(r"^\(?[IVXLCDMivxlcdm0-9]{1,6}\)?[.)\s]+\s*", "", cleaned)
+    # A statement that was wrapped over several lines reads as one line.
+    cleaned = re.sub(r"\s*\n\s*", " ", cleaned)
     return cleaned.strip()
 
 
@@ -220,6 +269,21 @@ def _sentence_around(text: str, start: int, end: int) -> str:
     return text[left:right].strip()
 
 
+def strip_page_markers(text: str) -> str:
+    """
+    Removes standalone page markers such as "Page 3 of 7".
+
+    A page marker is printing metadata, not content. It is removed as a whole
+    line, so the sentences around it stay apart and a sentence that was split
+    by a page break is put back together.
+    """
+    if not text:
+        return text
+
+    kept = [line for line in text.split("\n") if not _is_page_marker(line)]
+    return "\n".join(kept)
+
+
 def extract_structured_information(text: str, extract_title: bool = True, extract_summary: bool = True) -> StructuredInformation:
     """
     Extract structured information from text.
@@ -233,6 +297,10 @@ def extract_structured_information(text: str, extract_title: bool = True, extrac
         StructuredInformation object
     """
     structured_info = StructuredInformation()
+
+    # Page markers are printing metadata. They are removed before anything is
+    # extracted, so they can never end up inside a fact or split a sentence.
+    text = strip_page_markers(text)
 
     # Extract deadlines
     structured_info.deadlines = extract_deadlines(text)
@@ -283,6 +351,9 @@ def extract_structured_information(text: str, extract_title: bool = True, extrac
 
 def extract_deadlines(text: str) -> List[ExtractedDeadline]:
     """Extract application deadlines from text."""
+    # A page marker is printing metadata, never content.
+    text = strip_page_markers(text)
+
     deadlines = []
 
     # Patterns for deadlines with explicit "deadline" or "before" language
@@ -326,6 +397,9 @@ def extract_deadlines(text: str) -> List[ExtractedDeadline]:
 
 def extract_important_dates(text: str) -> List[ExtractedDate]:
     """Extract important dates other than deadlines."""
+    # A page marker is printing metadata, never content.
+    text = strip_page_markers(text)
+
     dates = []
 
     # Patterns for important dates (excluding deadline patterns)
@@ -365,19 +439,27 @@ def extract_age_requirements(text: str) -> List[ExtractedAgeRequirement]:
     so the word that says which side of the number applies is captured as
     well and stored in ``qualifier``.
     """
+    # A page marker is printing metadata, never content.
+    text = strip_page_markers(text)
+
     requirements = []
 
     # ORDER MATTERS: the explicit directions are matched before the plain
     # "18 years old" form, so a rule is never read the wrong way round.
+    # The direction word may be separated from the number by a filler such as
+    # "the age of" ("below the age of 30 years").
     age_patterns = [
         (r'between\s+(?P<low>\d{1,3})\s+and\s+(?P<high>\d{1,3})\s+years?', 'range'),
         (r'(?P<low>\d{1,3})\s+to\s+(?P<high>\d{1,3})\s+years?', 'range'),
+        # An upper bound: under, below, less than, not more than, at most.
         (r'(?P<qual>under|below|less\s+than|not\s+more\s+than|not\s+above|'
-         r'not\s+exceeding|up\s+to|within)\s+(?P<high>\d{1,3})\s+years?', 'upper'),
+         r'not\s+exceeding|up\s+to|within|at\s+most|max(?:imum)?\s*(?:age\s*)?(?:of\s*)?)'
+         r'\s*(?:the\s+)?(?:age\s+of\s*)?(?P<high>\d{1,3})\s+years?', 'upper'),
+        # A lower bound: at least, not less than, minimum, above, over.
         (r'(?P<qual>at\s+least|not\s+less\s+than|no\s+less\s+than|'
-         r'minimum\s+age\s+(?:is\s+)?|minimum\s+of|more\s+than\s+or\s+equal\s+to)\s+'
-         r'(?P<low>\d{1,3})\s+years?', 'lower'),
-        (r'(?P<qual>over|above|more\s+than|exceeding)\s+(?P<low>\d{1,3})\s+years?', 'lower'),
+         r'min(?:imum)?\s*(?:age\s*)?(?:of\s*)?|more\s+than\s+or\s+equal\s+to|'
+         r'over|above|more\s+than|exceeding|at\s+minimum)'
+         r'\s*(?:the\s+)?(?:age\s+of\s*)?(?P<low>\d{1,3})\s+years?', 'lower'),
         (r'(?P<low>\d{1,3})\s+years?\s+(?P<qual>or\s+older|or\s+above|or\s+more|and\s+above)', 'lower'),
         (r'(?P<high>\d{1,3})\s+years?\s+(?P<qual>or\s+younger|or\s+below|or\s+less|and\s+below)', 'upper'),
         (r'(?P<low>\d{1,3})\s+years?\s+(?:old|of\s+age)', 'lower'),
@@ -428,8 +510,49 @@ def extract_age_requirements(text: str) -> List[ExtractedAgeRequirement]:
     return requirements
 
 
+# A document name has to contain one of these. "Account", "bank" and
+# "details" on their own are too weak: "the bank account must be Aadhaar
+# linked" is a condition on the account, not a document to submit.
+STRONG_DOCUMENT_WORDS = (
+    "aadhaar",
+    "pan card",
+    "pan",
+    "itr",
+    "certificate",
+    "letter",
+    "proof",
+    "card",
+    "passport",
+    "licence",
+    "license",
+    "form",
+    "receipt",
+    "marksheet",
+    "mark sheet",
+    "transcript",
+    "diploma",
+    "degree certificate",
+    "bonafide",
+    "undertaking",
+    "account details",
+    "bank statement",
+    "affidavit",
+    "caste certificate",
+    "income certificate",
+)
+
+
+def _looks_like_a_document(item: str) -> bool:
+    """True when the fragment names a document the applicant has to provide."""
+    lowered = item.lower()
+    return any(word in lowered for word in STRONG_DOCUMENT_WORDS)
+
+
 def extract_required_documents(text: str) -> List[ExtractedDocument]:
     """Extract required documents."""
+    # A page marker is printing metadata, never content.
+    text = strip_page_markers(text)
+
     documents = []
 
     # Common document patterns
@@ -450,6 +573,9 @@ def extract_required_documents(text: str) -> List[ExtractedDocument]:
             doc_items = re.split(r'[,;]\s+', match_text)
 
             for item in doc_items:
+                # "documents to the institution: Aadhaar card" - the list
+                # starts after the colon.
+                item = re.sub(r"^[^:]{0,60}:\s*", "", item)
                 item = _clean_list_item(item)
                 if len(item) < 2:
                     continue
@@ -460,6 +586,13 @@ def extract_required_documents(text: str) -> List[ExtractedDocument]:
                 if len(item) > MAX_DOCUMENT_NAME_LENGTH:
                     continue
                 if CLAUSE_WORDS_RE.search(item):
+                    continue
+                # A fragment that ends in an infinitive ("... to enable") is
+                # part of a sentence, not a name.
+                if re.search(r"\bto\s+[a-z]+$", item, re.IGNORECASE):
+                    continue
+                # The name has to actually name a document.
+                if not _looks_like_a_document(item):
                     continue
                 if _is_page_marker(item) or _is_heading(item):
                     continue
@@ -472,30 +605,19 @@ def extract_required_documents(text: str) -> List[ExtractedDocument]:
                         original_text=item
                     ))
 
-    # Also look for common document names in bullet points or lists
-    doc_names = [
-        'Aadhaar', 'PAN card', 'ITR', 'income certificate', 'bank account details',
-        'passport', 'driver\'s license', 'voter ID', 'birth certificate',
-        'residence certificate', 'caste certificate', 'ration card',
-    ]
-
-    for doc in doc_names:
-        if doc.lower() in text.lower() and doc not in extracted_text:
-            match = re.search(re.escape(doc), text, re.IGNORECASE)
-            if match:
-                extracted_text.add(doc)
-                source_text = extract_surrounding_text(text, match.start(), match.end(), 40)
-                documents.append(ExtractedDocument(
-                    name=doc,
-                    description=None,
-                    original_text=source_text
-                ))
+    # A document is only reported when the source actually asks for it. A bare
+    # mention of a name - "the bank account must be Aadhaar linked" - is a
+    # condition on the account, not a document to submit, so it is not turned
+    # into a required document.
 
     return documents
 
 
 def extract_monetary_amounts(text: str) -> List[ExtractedMonetaryAmount]:
     """Extract monetary amounts."""
+    # A page marker is printing metadata, never content.
+    text = strip_page_markers(text)
+
     amounts = []
 
     # Patterns for Indian currency
@@ -549,6 +671,9 @@ def extract_monetary_amounts(text: str) -> List[ExtractedMonetaryAmount]:
 
 def extract_percentages(text: str) -> List[ExtractedPercentage]:
     """Extract percentage values."""
+    # A page marker is printing metadata, never content.
+    text = strip_page_markers(text)
+
     percentages = []
 
     percent_patterns = [
@@ -589,6 +714,9 @@ def extract_percentages(text: str) -> List[ExtractedPercentage]:
 
 def extract_contact_information(text: str) -> List[ExtractedContactInfo]:
     """Extract contact information."""
+    # A page marker is printing metadata, never content.
+    text = strip_page_markers(text)
+
     contacts = []
 
     # Phone number patterns
@@ -748,6 +876,9 @@ def extract_organizations(text: str) -> List[ExtractedOrganization]:
 
 def extract_eligibility_requirements(text: str) -> List[ExtractedRequirement]:
     """Extract eligibility requirements."""
+    # A page marker is printing metadata, never content.
+    text = strip_page_markers(text)
+
     requirements = []
 
     # Patterns that introduce an eligibility statement. The matched span is
@@ -796,32 +927,171 @@ def extract_eligibility_requirements(text: str) -> List[ExtractedRequirement]:
 
             if req not in seen:
                 seen.add(req)
+                # A rule that does not apply is labelled so it can never be
+                # read as a positive requirement.
+                lowered = req.lower()
+                negated = any(marker in lowered for marker in NEGATION_MARKERS)
                 requirements.append(ExtractedRequirement(
                     requirement=req,
-                    category=None,
+                    category="Not eligible" if negated else None,
                     original_text=req
                 ))
+
+    # The numbered items of a section about who qualifies are eligibility
+    # rules as well - the list of institutions, for example.
+    headings = _section_headings(text)
+    for match in re.finditer(
+        r'^\s*(?:\d{1,2}|[IVXLCDMivxlcdm]{1,6})[.)\s:]\s+', text, re.MULTILINE
+    ):
+        if _heading_kind(headings, match.start()) != "eligibility":
+            continue
+
+        item = _first_sentence(_clean_fragment(_item_text(text, match.start())))
+        if len(item) < 20 or len(item) > 300:
+            continue
+        if _is_page_marker(item) or _is_heading(item):
+            continue
+        # The section heading already says that these are rules, so an item
+        # without a verb - "Institutions of National Importance." - is a rule
+        # as well.
+        if item in seen:
+            continue
+
+        seen.add(item)
+        negated = any(marker in item.lower() for marker in NEGATION_MARKERS)
+        requirements.append(ExtractedRequirement(
+            requirement=item,
+            category="Not eligible" if negated else None,
+            original_text=item
+        ))
 
     return requirements
 
 
+# The start of the next numbered or lettered item.
+_NEXT_ITEM_RE = re.compile(r"(?m)^\s*(?:\d{1,3}|[IVXLCDMivxlcdm]{1,6})[.)\s]\s")
+
+
+def _item_text(text: str, start: int) -> str:
+    """
+    The text of a numbered item, from its marker to the next item.
+
+    An item can hold several sentences ("... only. Students who have already
+    acquired a postgraduate degree are not eligible to apply."), and all of
+    them belong to the item.
+    """
+    rest = text[start:]
+
+    blank = re.search(r"\n\s*\n", rest)
+    limit = blank.start() if blank else len(rest)
+    segment = rest[:limit]
+
+    # The item ends where the next item starts. The first marker in the
+    # segment belongs to this item, so the second one ends it.
+    markers = list(_NEXT_ITEM_RE.finditer(segment))
+    if len(markers) > 1:
+        segment = segment[: markers[1].start()]
+
+    return segment.strip()
+
+
+# Words that mark a section as a procedure. The items under such a section
+# are steps of the application.
+PROCEDURE_HEADING_WORDS = (
+    "procedure",
+    "how to apply",
+    "availing",
+    "step",
+    "process",
+    "applying",
+    "application procedure",
+)
+
+# Words that mark a section as a set of rules about who qualifies. The items
+# under such a section are eligibility rules, not steps.
+ELIGIBILITY_HEADING_WORDS = (
+    "eligib",
+    "type",
+    "institution",
+    "categor",
+    "criteria",
+    "who can apply",
+    "beneficiar",
+)
+
+
+def _section_headings(text: str) -> List[Tuple[int, str]]:
+    """
+    The section headings of a text, with their position.
+
+    A heading is a short line written in capitals and ending in a colon, for
+    example "(i) ELIGIBILITY:" or "4. PROCEDURE FOR AVAILING THE SCHOLARSHIP:".
+    """
+    headings: List[Tuple[int, str]] = []
+    offset = 0
+
+    for line in text.split("\n"):
+        candidate = line.strip()
+        if candidate and ":" in candidate:
+            head = candidate.split(":", 1)[0]
+            # The marker of the section is not part of the title.
+            head = re.sub(r"^\(?[IVXLCDMivxlcdm0-9]{1,6}\)?[.)\s]\s*", "", head).strip()
+            if len(head) >= 3 and head == head.upper() and re.search(r"[A-Z]", head):
+                headings.append((offset, head))
+        offset += len(line) + 1
+
+    return headings
+
+
+def _heading_kind(headings: List[Tuple[int, str]], position: int) -> str:
+    """Returns 'procedure', 'eligibility' or 'other' for the section at a position."""
+    current = ""
+    for start, title in headings:
+        if start < position:
+            current = title
+        else:
+            break
+
+    lowered = current.lower()
+    for word in PROCEDURE_HEADING_WORDS:
+        if word in lowered:
+            return "procedure"
+    for word in ELIGIBILITY_HEADING_WORDS:
+        if word in lowered:
+            return "eligibility"
+    return "other"
+
+
 def extract_application_procedure(text: str) -> List[ExtractedProcedure]:
     """Extract application procedure steps."""
+    # A page marker is printing metadata, never content.
+    text = strip_page_markers(text)
+
     procedures = []
 
     # Numbered items using Arabic or Roman numerals, e.g. "1." or "IV.".
     # Government notices use both, and a Roman numeral clause is a real step.
     step_patterns = [
-        r'(?:step|step\s+\d+)[:\s]*(\d+)[.:]?\s+(.+)',
-        r'^\s*(\d{1,2}|[IVXLCDM]{1,6})[.)\s:]\s+(.+)',
+        r'(?:step|step\s+\d+)[:\s]*(\d+)[.:]?\s+',
+        r'^\s*(\d{1,2}|[IVXLCDMivxlcdm]{1,6})[.)\s:]\s+',
     ]
 
     seen = set()
     step_num = 1
+    headings = _section_headings(text)
 
     for pattern in step_patterns:
         for match in re.finditer(pattern, text, re.MULTILINE | re.IGNORECASE):
-            step_text = _clean_fragment(_first_sentence(match.group(2).strip()))
+            # The items of a section about who qualifies are eligibility rules,
+            # not steps of the application.
+            if _heading_kind(headings, match.start()) == "eligibility":
+                continue
+
+            # The step is the whole item. A clause that was wrapped over
+            # several lines, or that was split by a page break, is put back
+            # together. The item marker is removed first, so that a roman
+            # numeral such as "I." is not read as the end of a sentence.
+            step_text = _first_sentence(_clean_fragment(_item_text(text, match.start())))
 
             # A section heading is not a step. "PROCEDURE FOR AVAILING THE
             # SCHOLARSHIP" is a title and must not become a bullet.
@@ -848,19 +1118,30 @@ def extract_application_procedure(text: str) -> List[ExtractedProcedure]:
 
 def extract_important_conditions(text: str) -> List[ExtractedCondition]:
     """Extract important conditions and exceptions."""
+    # A page marker is printing metadata, never content.
+    text = strip_page_markers(text)
+
     conditions = []
 
     # Patterns that introduce a condition. The matched span is expanded to the
     # surrounding sentence so the condition is a complete statement.
     condition_patterns = [
         r'(?:Note|Important)\s*[:\-]\s*',
-        r'(?:However|But|Exception|Provided|Condition)\s*[:\-]?\s*',
-        r'(?:shall\s+not|must\s+not|cannot)\s+',
+        r'(?:However|But|Exception|Except|Provided|Condition)\s*[:\-]?\s*',
+        r'(?:shall\s+not|must\s+not|cannot|not\s+required\s+to|not\s+permitted\s+to|'
+        r'not\s+entitled\s+to)\s+',
+        r'(?:in\s+case\s+of|in\s+case,|in\s+the\s+event\s+of)\s+',
         # An obligation for one of the parties, for example "Students must
         # apply" or "Institutions must verify". It keeps the instruction for
         # applicants and the instruction for institutions apart.
-        r'(?:students?|applicants?|candidates?|institutions?|parents?)\s+'
-        r'(?:must|shall|should|are\s+required\s+to|is\s+required\s+to)\s+',
+        r'(?:students?|applicants?|candidates?|institutions?|parents?|scholarships?|'
+        r'selection|results?|slots?|institution|university|college|authorities|'
+        r'commission|nodal\s+officers?|list|centres?)\s+(?:\w+[\s,]+){0,4}?'
+        r'(?:must|shall|should|can|have\s+to|has\s+to|are\s+required\s+to|'
+        r'is\s+required\s+to|are\s+earmarked|is\s+earmarked)\s+',
+        # An obligation without a named subject.
+        r'(?:are|is)\s+required\s+to\s+be\s+',
+        r'(?:shall|must)\s+have\s+to\s+',
     ]
 
     seen = set()
@@ -870,9 +1151,14 @@ def extract_important_conditions(text: str) -> List[ExtractedCondition]:
             cond = _clean_fragment(_sentence_around(text, match.start(), match.end()))
             # The label already says this is a condition, so the marker in the
             # source does not need to be repeated.
-            cond = re.sub(r"^(?:Note|Important)\s*[:\-]\s*", "", cond, flags=re.IGNORECASE).strip()
+            cond = re.sub(
+                r"^(?:Note|Important|However|But|Except)\s*[,:]?\s*",
+                "",
+                cond,
+                flags=re.IGNORECASE,
+            ).strip()
 
-            if len(cond) < 20 or len(cond) > 300:
+            if len(cond) < 20 or len(cond) > 400:
                 continue
             if _is_page_marker(cond) or _is_heading(cond):
                 continue

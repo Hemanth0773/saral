@@ -5,6 +5,7 @@ Validates that critical factual information is preserved in simplified text.
 
 import re
 import logging
+from collections import Counter
 from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime
 
@@ -339,6 +340,34 @@ def normalize_date_format_in_text(text: str) -> str:
     return " ".join(normalized_dates) if normalized_dates else ""
 
 
+def _word_overlap_ratio(original_text: str, simplified_text: str) -> float:
+    """
+    How much of the wording the two texts share.
+
+    A good simplification of a legal document keeps most of the wording on
+    purpose - the legal terms, the numbers and the conditions have to survive
+    - so a high overlap is not proof of a failure. It is only used together
+    with the structure.
+    """
+    original_words = re.findall(r"\w+", original_text.lower())
+    simplified_words = re.findall(r"\w+", simplified_text.lower())
+    if not original_words or not simplified_words:
+        return 0.0
+
+    shared = sum((Counter(original_words) & Counter(simplified_words)).values())
+    return shared / max(len(original_words), len(simplified_words))
+
+
+def _heading_count(text: str) -> int:
+    """Counts the Markdown headings in a text."""
+    return len(re.findall(r"(?m)^\s*#{1,6}\s+\S", text))
+
+
+def _bullet_count(text: str) -> int:
+    """Counts the Markdown list items in a text."""
+    return len(re.findall(r"(?m)^\s*[-*+]\s+\S", text))
+
+
 def validate_simplification_quality(original_text: str, simplified_text: str) -> List[str]:
     """
     Perform basic quality validation of simplification.
@@ -357,25 +386,22 @@ def validate_simplification_quality(original_text: str, simplified_text: str) ->
     if len(original_text) > 50 and len(simplified_text) < len(original_text) * 0.2:
         issues.append("Simplified text is suspiciously short (possible content loss)")
 
-    # Check if simplified text is too similar (no simplification)
-    # Only apply for texts longer than 200 characters to avoid false positives
-    if len(original_text) > 200 and len(simplified_text) > len(original_text) * 0.9:
-        # Calculate actual similarity based on preserved facts and structure
-        original_sentences = re.split(r'[.!?]+', original_text)
-        simplified_sentences = re.split(r'[.!?]+', simplified_text)
-
-        # If number of sentences hasn't changed much, might be too similar
-        if len(simplified_sentences) <= len(original_sentences) * 1.2:
-            # Count preserved fact numbers/dates
-            facts = extract_critical_facts(original_text)
-            preserved_count = 0
-            for fact in facts:
-                if fact.value in simplified_text:
-                    preserved_count += 1
-
-            # If most facts are preserved but text is similar length, that's OK
-            if preserved_count < len(facts) * 0.5:
-                issues.append("Simplified text is too similar to original (possible lack of simplification)")
+    # Check if the text was simplified at all.
+    #
+    # A good simplification of a legal or technical document keeps most of the
+    # wording on purpose, so word overlap alone cannot decide this. The
+    # structure has to be taken into account as well: reorganising a document
+    # into headings and lists is what makes it easier to read.
+    #
+    # Short texts are skipped, because the metrics are unreliable there.
+    if len(original_text) > 200:
+        overlap = _word_overlap_ratio(original_text, simplified_text)
+        structure_improved = (
+            _heading_count(simplified_text) > _heading_count(original_text)
+            or _bullet_count(simplified_text) > _bullet_count(original_text)
+        )
+        if overlap > 0.85 and not structure_improved:
+            issues.append("Simplified text is too similar to original (possible lack of simplification)")
 
     # Check for obvious hallucinations or changes
     original_words = set(re.findall(r'\b\w{4,}\b', original_text.lower()))

@@ -548,8 +548,8 @@ validated, and the response reports `validation_passed` and
 cd backend
 python -m pytest tests/ -v
 ```
-- **Total Tests**: 457 (+1 skipped when a local origin is not on the configured allow-list)
-- **Passing**: 457
+- **Total Tests**: 513 (+1 skipped when a local origin is not on the configured allow-list)
+- **Passing**: 513
 - **Failing**: 0
 - **Test Coverage**: ~70% across all modules
 
@@ -602,6 +602,21 @@ npm run verify:scholarship # live Instant Summary check against a running backen
 - Long documents are chunked and combined in order, without cutting a clause
 - Broken model output is reported instead of being presented as a good result
 - Markdown, including escaped characters and HTML, is passed through unchanged
+
+**Backend scholarship regression tests** (`backend/tests/test_scholarship_regression.py`, 55 tests) use the complete notice in `backend/tests/fixtures/scholarship_terms.txt`:
+- Every direction of an age comparison keeps its meaning (below, under, less
+  than, above, over, more than, at least, minimum, at most, maximum, or older,
+  or younger, between)
+- A rule that does not apply stays negative and is labelled "Not eligible"
+- A page marker never appears in a fact, and a sentence split by a page break
+  is put back together
+- All four institution categories, the NAAC accreditation and the AISHE code
+  rule are preserved
+- The one-benefit rules, the Aadhaar seeding rule, the 30 % reservation, the
+  50/50 subject allocation, the tie-breaking rules and the result announcement
+  are preserved
+- The "too similar to original" warning fires on unchanged text, does not fire
+  on a properly simplified text, and is not measured on short text
 
 **Live API Testing (M12 Verification):**
 8 of 16 endpoints verified with live HTTP requests:

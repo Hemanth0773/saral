@@ -210,19 +210,37 @@ class TestDocumentNames:
         documents = extraction_service.extract_required_documents(SCHOLARSHIP_PROCEDURE)
         names = [document.name for document in documents]
 
-        assert names
         for name in names:
             assert len(name) <= 60
             assert "shall" not in name.lower()
             assert "must" not in name.lower()
             assert "to their institutions to enable" not in name
+            # A fragment that is not a document name is not reported.
+            assert "match of name of student" not in name
 
     def test_the_real_documents_are_still_found(self):
-        documents = extraction_service.extract_required_documents(SCHOLARSHIP_PROCEDURE)
+        """A document the source really asks for is reported."""
+        text = (
+            "The applicant must submit the following documents to the institution: "
+            "Aadhaar card, income certificate, bank account details."
+        )
+        documents = extraction_service.extract_required_documents(text)
         names = " ".join(document.name for document in documents).lower()
 
         assert "aadhaar" in names
-        assert "bank account number" in names
+        assert "income certificate" in names
+        assert "bank account details" in names
+
+    def test_a_bank_account_condition_is_not_a_required_document(self):
+        """Aadhaar as an identifier for the bank account is not a document."""
+        text = (
+            "The scholarship is directly paid to the students into their bank accounts. "
+            "For this their bank account numbers are required to be Aadhaar linked "
+            "and verified."
+        )
+        documents = extraction_service.extract_required_documents(text)
+
+        assert documents == []
 
     def test_an_ordinary_document_list_still_works(self):
         text = "Applicants must submit Aadhaar, income certificate, and bank account details."

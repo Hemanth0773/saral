@@ -30,6 +30,9 @@ MAX_DOCUMENT_NAMES = 5
 # showing all of them would push the other facts out of the summary.
 MAX_PROCEDURE_STEPS = 4
 
+# Maximum number of eligibility rules shown, for the same reason.
+MAX_ELIGIBILITY_RULES = 4
+
 # A standalone pagination marker such as "Page 5 of 7" is never a fact.
 PAGE_MARKER_RE = re.compile(
     r"^\s*pages?\s+\d+(?:\s*(?:of|out\s+of|/)\s+\d+)?\s*\.?\s*$",
@@ -131,7 +134,10 @@ def _is_duplicate(candidate: str, existing: List[str]) -> bool:
 def _is_usable(value: str) -> bool:
     trimmed = value.strip()
     if len(trimmed) < 4:
-        return False
+        # A short value can still be a fact when it carries a number, for
+        # example the percentage "30%".
+        if not re.search(r"\d", trimmed):
+            return False
     if _is_page_marker(trimmed):
         return False
     return bool(re.search(r"[a-z0-9]", trimmed, re.IGNORECASE))
@@ -141,10 +147,10 @@ def format_age_requirement(requirement: ExtractedAgeRequirement) -> str:
     """
     Formats an age rule so its direction survives.
 
-    "under 30 years" stays an upper bound and "30 years or older" stays a
-    lower bound; neither is turned into "30+ years".
+    "below the age of 30 years" stays an upper bound and "30 years or older"
+    stays a lower bound; neither is turned into "30+ years".
     """
-    qualifier = (requirement.qualifier or "").strip().lower()
+    qualifier = re.sub(r"\s+", " ", (requirement.qualifier or "").strip())
     minimum = requirement.minimum_age
     maximum = requirement.maximum_age
 
@@ -155,14 +161,14 @@ def format_age_requirement(requirement: ExtractedAgeRequirement) -> str:
         if qualifier in _TRAILING_QUALIFIERS:
             return f"{minimum} years {qualifier}"
         if qualifier:
-            return f"{qualifier} {minimum} years"
+            return f"{qualifier[0].upper()}{qualifier[1:]} {minimum} years"
         return f"{minimum}+ years"
 
     if maximum is not None:
         if qualifier in _TRAILING_QUALIFIERS:
             return f"{maximum} years {qualifier}"
         if qualifier:
-            return f"{qualifier} {maximum} years"
+            return f"{qualifier[0].upper()}{qualifier[1:]} {maximum} years"
         return f"Up to {maximum} years"
 
     return ""
@@ -200,6 +206,7 @@ def build_instant_summary(
     precise_values: List[str] = []
     procedure_count = 0
     skipped_steps = 0
+    skipped_rules = 0
 
     def add(item_id: str, kind: str, label: str, value: str, severity: str = "info") -> None:
         cleaned = value.strip()
@@ -257,10 +264,22 @@ def build_instant_summary(
         label = _purpose_label(percentage.purpose, PERCENTAGE_LABELS, "Percentage")
         add(f"percentage-{index}", "percentage", label, percentage.percentage)
 
+    eligibility_count = 0
     for index, requirement in enumerate(structured_info.eligibility_requirements or []):
-        lowered = requirement.requirement.lower()
-        label = "Selection" if any(hint in lowered for hint in SELECTION_HINTS) else "Eligibility"
+        category = (requirement.category or "").strip()
+        if category:
+            # The backend already decided what kind of rule this is, for
+            # example a rule that does not apply.
+            label = category
+        else:
+            lowered = requirement.requirement.lower()
+            label = "Selection" if any(hint in lowered for hint in SELECTION_HINTS) else "Eligibility"
+
+        if eligibility_count >= MAX_ELIGIBILITY_RULES:
+            skipped_rules += 1
+            continue
         add(f"eligibility-{index}", "eligibility", label, requirement.requirement)
+        eligibility_count += 1
 
     # The procedure comes before the conditions, so a numbered step keeps its
     # own label instead of also appearing as a condition.
@@ -313,9 +332,9 @@ def build_instant_summary(
         severity = "info" if fact.preserved_in_simplified else "warning"
         add(f"preserved-{index}", kind, label, fact.value, severity)
 
-    # The steps that did not fit are counted as hidden, so the interface can
-    # report that the document contains more.
-    total = len(candidates) + skipped_steps
+    # The steps and the rules that did not fit are counted as hidden, so the
+    # interface can report that the document contains more.
+    total = len(candidates) + skipped_steps + skipped_rules
 
     # Keep the procedure steps short, then apply the overall limit.
     procedure_seen = 0

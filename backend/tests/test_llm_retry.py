@@ -577,7 +577,8 @@ class TestFactValidationAfterChunking:
         class EchoProvider(FakeProvider):
             def simplify_text(self, text, target_grade_level):
                 self.calls.append(text)
-                return text
+                # A heading, so the output is structured and not a copy.
+                return "### Section\n\n" + text
 
         provider = EchoProvider("Groq", ["echo"])
 
@@ -605,7 +606,8 @@ class TestFactValidationAfterChunking:
         class EchoProvider(FakeProvider):
             def simplify_text(self, text, target_grade_level):
                 self.calls.append(text)
-                return text
+                # A heading, so the output is structured and not a copy.
+                return "### Section\n\n" + text
 
         provider = EchoProvider("Groq", ["echo"])
 

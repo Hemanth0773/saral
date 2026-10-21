@@ -1,8 +1,8 @@
 # Project Status: Cognitive Accessibility Simplifier
 
 **Last Updated**: October 20, 2026  
-**Current Milestone**: Milestone 17 (One canonical output for website and extension) - Complete  
-**Overall Completion**: ~100% (Milestones 1-17 complete, 457 backend tests + 104 extension tests passing)
+**Current Milestone**: Milestone 18 (Accuracy and completeness of the simplified output) - Complete  
+**Overall Completion**: ~100% (Milestones 1-18 complete, 457 backend tests + 104 extension tests passing)
 
 ---
 
@@ -26,6 +26,7 @@
 - ✅ **Milestone 15 (Fidelity Validation - No Invented Facts)**: Complete - Page artifacts stripped before the model sees the text, prompt hardened, four new fidelity checks, 31 new backend tests passing
 - ✅ **Milestone 16 (Instant Summary Quality and Markdown Rendering)**: Complete - Extraction returns complete statements, headings and page markers excluded, safe Markdown renderer, 14 new backend tests and 38 new extension tests passing
 - ✅ **Milestone 17 (One Canonical Output for Website and Extension)**: Complete - Backend builds the Instant Summary, shared Markdown parser, age direction preserved, completeness rule added, 26 new backend tests and 10 new extension tests passing
+- ✅ **Milestone 18 (Accuracy and Completeness of the Simplified Output)**: Complete - Age direction, negation, page markers, document vs account condition, heading-aware sections, "too similar" warning refined, 56 new backend regression tests on the complete notice
 
 ### Architecture Diagram
 - System architecture diagram created: `docs/system-architecture.svg` and `docs/system-architecture.png`
@@ -44,6 +45,91 @@
 - **M15 Verification**: fidelity checks tested with 31 mocked-model tests plus two live runs of the reported scholarship notice
 - **M16 Verification**: extraction quality tested with 14 backend tests; Instant Summary and Markdown tested with 38 extension tests plus a live run of the reported scholarship notice and a headless rendering of the popup
 - **M17 Verification**: the canonical output tested with 26 backend tests and 10 extension tests; the website and the extension were rendered in a browser from the same API response and show the same facts
+- **M18 Verification**: the complete scholarship notice is a regression fixture (`backend/tests/fixtures/scholarship_terms.txt`) covered by 55 new backend tests; two live runs of the full document preserved all 27 checked requirements with `validation_passed: true` and no artefacts
+
+---
+
+## Milestone 18 — Accuracy and Completeness of the Simplified Output
+
+**Status**: ✅ COMPLETE  
+**Date Completed**: October 21, 2026
+
+**Root Causes (confirmed by reproducing the reported output)**
+
+1. **`Age requirement: 30+ years` for "below the age of 30 years".**
+   `extract_age_requirements` matched only the number. The direction word had
+   to sit directly in front of it, so "below the age of 30 years" fell
+   through to the plain "30 years old" form and became a lower bound.
+2. **A negative rule shown as a positive requirement.**
+   "Students, who have already acquired any postgraduate degree, are not
+   eligible to apply" was extracted and labelled "Eligibility".
+3. **Page markers inside the facts.**
+   The markers were only removed from the text sent to the model. The
+   extraction ran on the raw text, so "Page 3 of 7" ended up inside a
+   requirement and split the sentence it sat in.
+4. **`Documents needed: Aadhaar`.**
+   A hard coded list of document names turned every mention of a document
+   into a required document, even when the source only said that the bank
+   account has to be Aadhaar linked.
+5. **The "too similar to original" warning.**
+   The check compared the exact fact strings and used the length and the
+   sentence count. A fact written "30 %" instead of "30%" was counted as
+   lost, and a well structured simplification of a legal text was reported
+   as unchanged.
+
+**What Changed**
+
+| File | Change |
+| --- | --- |
+| `backend/app/services/extraction_service.py` | The direction of an age rule is captured (including "below the age of 30 years", "at most", "maximum age of"); a negated rule is labelled "Not eligible"; page markers are stripped in every extractor; a document has to name a document; the section heading decides whether the numbered items are rules or steps. |
+| `backend/app/services/summary_service.py` | The age value keeps the wording of the source ("Below 30 years"); the eligibility rules are capped so the other facts stay in the summary; the hidden count includes the rules that did not fit. |
+| `backend/app/services/validation_service.py` | The "too similar" check now compares the wording and the structure, so a restructured legal text is not reported as unchanged. |
+| `backend/tests/fixtures/scholarship_terms.txt` | **New.** The complete notice. |
+| `backend/tests/test_scholarship_regression.py` | **New.** 55 tests on the complete notice. |
+| `extension/scripts/verify-scholarship.mjs` | Now runs against the complete notice and checks the age direction and the negative rules. |
+
+**Section by Section Assessment of the Full Fixture (two live runs)**
+
+```
+ok  Eligibility: first PG degree only            ok  Institutions: Section 2(f) and NAAC
+ok  postgraduate degree holders not eligible      ok  deemed universities, Section 3
+ok  already admitted in the first year            ok  fully funded by government
+ok  integrated programmes, PG component           ok  institutions of national importance
+ok  age below 30                                  ok  AISHE code and registration
+ok  full time mode only                           ok  only one scholarship at a time
+ok  open/distance not eligible                    ok  declaration required
+ok  UGC specified degrees                         ok  no paid appointment
+ok  one benefit: NOC not required, resignation    ok  already receiving, must relinquish
+ok  Aadhaar seeding and verified account          ok  selection on merit
+ok  30 % reserved for women                       ok  50/50 subject allocation
+ok  tie break on UG marks                         ok  tie break on Class XII marks
+ok  result announced in November/December         ok  check on NSP with user id and password
+ok  UGC website
+```
+
+`missing sections: 0 of 27`, `artefacts: none`, `validation_passed: True`,
+`fact_preservation_rate: 1.0` in both runs.
+
+**Test Results**
+
+- Backend: **513 passing, 1 skipped, 0 failing** (was 457; +56 regression tests)
+- Extension: **104 passing** (unchanged), typecheck and lint clean, build and
+  `verify:dist` clean
+- Website: typecheck and build clean, lint unchanged at 6 pre-existing warnings
+- Live: `verify:backend` 31 checks passed; the full notice checked live twice
+
+**Known Limitations (Honest)**
+
+- The Instant Summary is still pattern based. A rule written in a way the
+  patterns do not recognise is not reported - fewer facts, never wrong ones.
+- The model rewrites the notice, so the wording differs between runs. The
+  meaning was checked in two runs, but a single run cannot prove the output
+  is always faithful.
+- A fact the model writes as "30 %" (with a narrow no-break space) is matched
+  by the validation, but the raw text still carries the space.
+- The "too similar" check measures the wording and the structure. A text that
+  is reorganised but whose sentences are unchanged is still reported as
+  unchanged.
 
 ---
 
