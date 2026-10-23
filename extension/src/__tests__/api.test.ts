@@ -150,3 +150,33 @@ test('a multipart upload is sent without a manual content type header', async ()
   assert.equal(headers['Content-Type'], undefined);
   assert.ok(seenInit?.body instanceof FormData);
 });
+
+test('performApiRequest reconstructs FormData from serialized multipart data', async () => {
+  let seenBody: unknown = undefined;
+  let seenContentType: string | undefined = undefined;
+  stubFetch(async (_url, init) => {
+    seenBody = init.body;
+    seenContentType = (init.headers as Record<string, string>)?.['Content-Type'];
+    return jsonResponse({ success: true, text: 'extracted' });
+  });
+
+  const base64 = btoa('hello');
+  await performApiRequest('http://127.0.0.1:8000', {
+    kind: 'api-request',
+    path: '/api/documents/extract',
+    method: 'POST',
+    multipart: { field: 'file', filename: 'notice.pdf', type: 'application/pdf', data: base64 },
+  });
+
+  assert.ok(seenBody instanceof FormData, 'the body must be a FormData instance');
+  assert.equal(seenContentType, undefined, 'no manual Content-Type header must be set');
+  const formData = seenBody as FormData;
+  const file = formData.get('file');
+  assert.ok(file instanceof File, 'the file field must be a File');
+  if (file instanceof File) {
+    assert.equal(file.name, 'notice.pdf');
+    assert.equal(file.type, 'application/pdf');
+    const text = await file.text();
+    assert.equal(text, 'hello');
+  }
+});

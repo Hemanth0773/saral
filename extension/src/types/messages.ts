@@ -30,6 +30,13 @@ export interface ApiRequestMessage {
   method: 'GET' | 'POST';
   /** JSON body (already serialised) or multipart body for file uploads. */
   body?: string | FormData;
+  /**
+   * Serialized multipart file upload, used instead of `body: FormData` because
+   * FormData/File objects do not reliably survive `chrome.runtime.sendMessage`
+   * structured cloning. The background service worker reconstructs FormData
+   * from these fields before calling `fetch`.
+   */
+  multipart?: { field: string; filename: string; type: string; data: string };
 }
 
 /** Popup -> background: read the current tab and return its readable text. */
