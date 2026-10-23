@@ -108,13 +108,22 @@ export const saralApi = {
 
   /** `POST /api/documents/extract` — multipart upload handled by the backend. */
   extractFile(file: File): Promise<DocumentExtractionResponse> {
-    const formData = new FormData();
-    formData.append('file', file, file.name);
-    return callBackground<DocumentExtractionResponse>({
-      kind: 'api-request',
-      path: '/api/documents/extract',
-      method: 'POST',
-      body: formData,
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const arrayBuffer = reader.result as ArrayBuffer;
+        const base64 = btoa(
+          Array.from(new Uint8Array(arrayBuffer), (byte) => String.fromCharCode(byte)).join(''),
+        );
+        callBackground<DocumentExtractionResponse>({
+          kind: 'api-request',
+          path: '/api/documents/extract',
+          method: 'POST',
+          multipart: { field: 'file', filename: file.name, type: file.type, data: base64 },
+        }).then(resolve).catch(reject);
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(file);
     });
   },
 

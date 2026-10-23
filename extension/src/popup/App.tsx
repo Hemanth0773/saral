@@ -237,9 +237,34 @@ export default function App() {
       let sourceText = trimmed;
       let detected: string | null = detectedLanguage;
 
-      // A pasted portal URL is fetched by the backend so its SSRF protection
-      // and extraction pipeline stay in one place.
-      if (!file && looksLikeUrl(trimmed)) {
+      // When a document is attached but the text box is empty, extract the
+      // file's text first so the simplification pipeline receives non-empty
+      // source text instead of an empty string.
+      if (file && !trimmed) {
+        setIsReading(true);
+        const extracted = await saralApi.extractFile(file);
+        setIsReading(false);
+        if (!extracted.text.trim()) {
+          simplifyGuard.finish();
+          setBanner({
+            title: 'No text found in document',
+            message:
+              'Saral could not extract any text from this file. Try a different document or paste the text instead.',
+            retryable: false,
+            tone: 'error',
+          });
+          return;
+        }
+        sourceText = extracted.text;
+        detected = extracted.language;
+        setText(extracted.text);
+        setDetectedLanguage(extracted.language);
+        setSourceNote(
+          `Extracted ${extracted.metadata.word_count.toLocaleString()} words from ${extracted.filename}. Nothing has been sent yet.`,
+        );
+      } else if (!file && looksLikeUrl(trimmed)) {
+        // A pasted portal URL is fetched by the backend so its SSRF protection
+        // and extraction pipeline stay in one place.
         setIsReading(true);
         const extracted = await saralApi.extractUrl(trimmed);
         setIsReading(false);

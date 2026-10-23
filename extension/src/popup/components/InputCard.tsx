@@ -89,7 +89,8 @@ export default function InputCard({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="btn-tactile brutal-pill-sm pointer-events-none mt-1.5 inline-flex items-center gap-1 bg-white px-3 py-1 text-[11px] font-bold text-saral-ink"
+          disabled={isReading}
+          className="btn-tactile brutal-pill-sm mt-1.5 inline-flex items-center gap-1 bg-white px-3 py-1 text-[11px] font-bold text-saral-ink"
         >
           <PlusIcon className="text-[14px]" />
           <span>{file ? 'Choose another file' : 'Choose file'}</span>
